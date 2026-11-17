@@ -1,0 +1,28 @@
+{
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "query",
+          "key": "product_id",
+          "value": "(?<product_id>[^&]+)"
+        },
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|SkypeUriPreview|meta-externalagent|Discordbot|Pinterest).*"
+        }
+      ],
+      "destination": "/api/product-share?product_id=:product_id"
+    },
+    {
+      "source": "/p/:id",
+      "destination": "/api/product-share?id=:id"
+    },
+    {
+      "source": "/producto/:id",
+      "destination": "/api/product-share?id=:id"
+    }
+  ]
+}

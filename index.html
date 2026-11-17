@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="es" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/zafra/logo-menu.webp" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>JavrelStore | Catálogo de Tecnología Prémium, Celulares y Periféricos</title>
+    <meta name="description" content="JavrelStore: Especialistas en iPhones, smartphones, computadores gamer, consolas, periféricos de alta gama y soporte técnico con envíos a todo el país y atención directa." />
+
+    <!-- Open Graph base: las fichas compartidas usan /p/:id con metadatos por producto -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="JavrelStore" />
+    <meta property="og:title" content="JavrelStore | Tecnología Prémium, Celulares y Periféricos" />
+    <meta property="og:description" content="iPhones, smartphones, computadores gamer, consolas y periféricos de alta gama con envío asegurado a todo el país." />
+    <meta property="og:image" content="https://mercado-tecnologico.vercel.app/zafra/banner-teclado.jpg" />
+    <meta property="og:image:alt" content="JavrelStore — Tecnología prémium" />
+    <meta property="og:url" content="https://mercado-tecnologico.vercel.app/" />
+    <meta property="og:locale" content="es_CO" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="JavrelStore | Tecnología Prémium, Celulares y Periféricos" />
+    <meta name="twitter:description" content="iPhones, smartphones, computadores gamer, consolas y periféricos de alta gama con envío asegurado a todo el país." />
+    <meta name="twitter:image" content="https://mercado-tecnologico.vercel.app/zafra/banner-teclado.jpg" />
+    <!-- Google Fonts idénticas a la referencia Zafara -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Sora:wght@300;400;500;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+    <style>
+      /* Respaldo de arranque: evita la pantalla en blanco si React no monta. */
+      #boot-screen {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: linear-gradient(135deg, #f8fafc 0%, #eef4ff 45%, #e2e8f0 100%);
+        font-family: 'Instrument Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        color: #0f172a;
+      }
+      #boot-screen .boot-card {
+        width: 100%;
+        max-width: 520px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 24px;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.14);
+        padding: 32px;
+        text-align: center;
+      }
+      #boot-screen img {
+        width: 56px;
+        height: 56px;
+        object-fit: contain;
+        margin-bottom: 16px;
+      }
+      #boot-screen h1 {
+        margin: 0 0 8px;
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      #boot-screen p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #475569;
+      }
+      #boot-screen .boot-detail {
+        margin-top: 16px;
+        padding: 12px;
+        border-radius: 12px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        font-family: 'Space Mono', Consolas, monospace;
+        font-size: 11px;
+        color: #334155;
+        word-break: break-word;
+      }
+      #boot-screen .boot-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 20px;
+      }
+      #boot-screen button {
+        cursor: pointer;
+        padding: 12px 20px;
+        border-radius: 14px;
+        border: none;
+        background: #0a6cff;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 800;
+        box-shadow: 0 10px 24px rgba(10, 108, 255, 0.28);
+      }
+      #boot-screen button.boot-secondary {
+        background: #fff;
+        color: #334155;
+        border: 1px solid #cbd5e1;
+        box-shadow: none;
+      }
+      @keyframes boot-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.45; }
+      }
+      #boot-screen .boot-loading {
+        animation: boot-pulse 1.4s ease-in-out infinite;
+      }
+    </style>
+  </head>
+  <body class="bg-[#F8FAFC] text-[#0F172A] antialiased selection:bg-[#0A6CFF] selection:text-white overflow-x-hidden min-h-screen">
+    <div id="root">
+      <div id="boot-screen" data-boot-loader>
+        <div class="boot-card">
+          <img src="/zafra/logo-menu.webp" alt="JavrelStore" />
+          <h1>JavrelStore</h1>
+          <p class="boot-loading">Cargando tu catálogo de tecnología prémium…</p>
+          <noscript>
+            <p style="margin-top: 14px">
+              Activa JavaScript en tu navegador para visualizar la tienda.
+            </p>
+          </noscript>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Respaldo de emergencia: si el bundle no evalúa o React no monta,
+      // mostramos una tarjeta de error con acciones de recuperación.
+      (function () {
+        var bootErrorShown = false;
+
+        function escapeHtml(value) {
+          return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        }
+
+        window.__javrelShowBootError = function (detail) {
+          if (bootErrorShown) return;
+          var root = document.getElementById('root');
+          if (!root) return;
+          if (root.getAttribute('data-react-mounted') === '1') return;
+          var loader = root.querySelector('[data-boot-loader]');
+          if (!loader) return;
+          bootErrorShown = true;
+
+          var message = detail || 'La aplicación no pudo iniciarse en este navegador.';
+          loader.innerHTML =
+            '<div class="boot-card" role="alert">' +
+            '<img src="/zafra/logo-menu.webp" alt="JavrelStore" />' +
+            '<h1>No pudimos cargar la tienda</h1>' +
+            '<p>Se produjo un problema al iniciar JavrelStore. Reintenta la carga; tus productos y pedidos están seguros en la nube.</p>' +
+            '<div class="boot-detail">' + escapeHtml(message) + '</div>' +
+            '<div class="boot-actions">' +
+            '<button type="button" onclick="window.location.reload()">Reintentar ahora</button>' +
+            '<button type="button" class="boot-secondary" onclick="window.location.replace(window.location.pathname + \'?_r=\' + Date.now())">Recargar sin caché</button>' +
+            '</div>' +
+            '</div>';
+        };
+
+        window.addEventListener(
+          'error',
+          function (event) {
+            if (event && event.message) {
+              window.__javrelShowBootError(event.message);
+            }
+          },
+          true
+        );
+
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event && event.reason;
+          window.__javrelShowBootError(
+            (reason && reason.message) || 'Promesa rechazada durante el arranque.'
+          );
+        });
+
+        window.setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.querySelector('[data-boot-loader]')) {
+            window.__javrelShowBootError(
+              'La aplicación tardó demasiado en iniciar. Verifica tu conexión e inténtalo de nuevo.'
+            );
+          }
+        }, 15000);
+      })();
+    </script>
+
+    <script
+      type="module"
+      src="/src/main.jsx"
+      onerror="window.__javrelShowBootError && window.__javrelShowBootError('No se pudo descargar el paquete de la aplicación.')"
+    ></script>
+  </body>
+</html>
