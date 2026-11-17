@@ -22,6 +22,10 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Webhook transaccional único: nunca cachear
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+
   try {
     const event = req.body;
 

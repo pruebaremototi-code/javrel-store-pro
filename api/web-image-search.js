@@ -342,12 +342,16 @@ export default async function handler(req, res) {
   const limit = Math.min(Math.max(Number(req.query?.limit) || 20, 1), 30);
 
   if (!term) {
-    return res.status(200).json({
-      success: true,
-      engine: 'webpro',
-      count: 0,
-      data: [],
-    });
+    res
+      .setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600')
+      .status(200)
+      .json({
+        success: true,
+        engine: 'webpro',
+        count: 0,
+        data: [],
+      });
+    return;
   }
 
   const settled = await Promise.allSettled([
@@ -385,6 +389,7 @@ export default async function handler(req, res) {
 
   const data = dedupe(collected, limit);
 
+  res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=3600');
   return res.status(200).json({
     success: true,
     engine: 'webpro',

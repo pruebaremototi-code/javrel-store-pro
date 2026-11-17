@@ -726,6 +726,8 @@ export default async function handler(req, res) {
       const items = await fetchMagnificRealItems(q, apiKey, mcpConfig);
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Access-Control-Allow-Origin', '*');
+      // Los resultados de búsqueda de imágenes son razonablemente estables: cachear 10 min en CDN
+      res.setHeader('Cache-Control', 'public, max-age=120, s-maxage=600, stale-while-revalidate=1800');
       res.statusCode = 200;
       res.end(
         JSON.stringify({

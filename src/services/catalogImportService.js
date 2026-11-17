@@ -17,10 +17,12 @@ const AI_CALL_TIMEOUT_MS = 12000; // 12 s máximo por intento individual
 // ─── Concurrencia máxima de páginas PDF en paralelo ─────────────────────────
 const PDF_PARALLEL_PAGES = 3;
 
-// Claves de Google AI Studio (Primaria y Respaldo)
+// Claves de Google AI Studio — se leen de las variables de entorno en Vercel.
+// En desarrollo local, créalas en un archivo .env (nunca commitear ese archivo).
 export const DEFAULT_GEMINI_KEYS = [
-  
-];
+  import.meta.env.VITE_GEMINI_API_KEY || '',
+  import.meta.env.VITE_GEMINI_API_KEY_BACKUP || '',
+].filter(Boolean);
 
 // ─── Cadena Oficial Actualizada de Modelos Gratuitos con Failover Instantáneo ─────────
 // Orden de prioridad estricto: modelos de última generación primero ➔ respaldos progresivos

@@ -23,9 +23,13 @@ export default async function handler(req, res) {
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+
+  // POST/PUT son mutaciones: nunca cachear
+  if (req.method === 'POST' || req.method === 'PUT') {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
@@ -34,10 +38,25 @@ export default async function handler(req, res) {
 
   // GET: Obtener el estado global sincronizado para cualquier dispositivo
   if (req.method === 'GET') {
+    // Parámetros de paginación del catálogo público
+    const page  = Math.max(1, Number(req.query?.page)  || 1);
+    const limit = Math.min(Math.max(Number(req.query?.limit) || 100, 1), 200);
+    const from  = (page - 1) * limit;
+    const to    = from + limit - 1;
+
     try {
-      // 1. Intentar consultar Supabase en vivo
-      const { data: dbProducts, error: pError } = await supabase.from('products').select('*');
-      const { data: dbCategories, error: cError } = await supabase.from('categories').select('*');
+      // 1. Intentar consultar Supabase en vivo — columnas estrictamente necesarias + rango paginado
+      const PRODUCT_COLUMNS =
+        'id,title,name,price,original_price,image_url,additional_images,condition,commercial_tag,badge,category_id,category,description,stock,specs,brand,brand_id,rating,reviews,featured,is_featured';
+      const { data: dbProducts, error: pError } = await supabase
+        .from('products')
+        .select(PRODUCT_COLUMNS)
+        .range(from, to)
+        .order('created_at', { ascending: false });
+      const { data: dbCategories, error: cError } = await supabase
+        .from('categories')
+        .select('id,name,slug,icon')
+        .order('name');
 
       let products = null;
       let categories = null;
@@ -92,13 +111,18 @@ export default async function handler(req, res) {
         categories = dbCategories;
       }
 
-      return res.status(200).json({
-        success: true,
-        products: products || (cachedStore?.products) || null,
-        categories: categories || (cachedStore?.categories) || null,
-        config: cachedStore?.config || null,
-        timestamp: cachedStore?.timestamp || Date.now(),
-      });
+      return res
+        .status(200)
+        .setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
+        .json({
+          success: true,
+          products: products || (cachedStore?.products) || null,
+          categories: categories || (cachedStore?.categories) || null,
+          config: cachedStore?.config || null,
+          timestamp: cachedStore?.timestamp || Date.now(),
+          page,
+          limit,
+        });
     } catch (err) {
       console.warn('Sync GET error:', err);
       return res.status(200).json({

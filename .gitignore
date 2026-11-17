@@ -23,3 +23,10 @@ investigation.cany/
 *.njsproj
 *.sln
 *.sw?
+
+# Variables de entorno — NUNCA subir al repositorio
+.env
+.env.local
+.env.production
+.env.development
+.env.staging

@@ -20,6 +20,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método no permitido. Utilice POST.' });
   }
 
+  // OTP de un solo uso: nunca cachear bajo ninguna circunstancia
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+
   const { email, otpCode } = req.body || {};
   const AUTHORIZED_EMAIL = 'jhonkavasquez@gmail.com';
 

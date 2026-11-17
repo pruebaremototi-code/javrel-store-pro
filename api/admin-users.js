@@ -337,6 +337,10 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Datos sensibles de autenticación/RBAC: nunca almacenar en caché
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+
   const body = req.body || {};
   const action = String(body.action || '').trim();
 

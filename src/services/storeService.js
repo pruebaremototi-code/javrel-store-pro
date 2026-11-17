@@ -641,22 +641,43 @@ export const storeService = {
     }
 
     // 2. Supabase es la fuente de verdad definitiva: productos + categorías + marcas.
+    // Se seleccionan solo las columnas necesarias y se pagina en bloques de 200
+    // para evitar transferencias masivas (el SDK de Supabase no pagina automáticamente).
+    const PRODUCT_COLS =
+      'id,title,name,price,original_price,image_url,additional_images,condition,commercial_tag,badge,category_id,category,description,stock,specs,brand,brand_id,rating,reviews,featured,is_featured,reference,sku';
+    const PAGE_SIZE = 200;
     try {
-      const [productsRes, categoriesRes, brandsRes] = await Promise.all([
-        supabase.from('products').select('*'),
+      // Categorías y marcas: tablas pequeñas, se leen completas
+      const [categoriesRes, brandsRes] = await Promise.all([
         supabase.from('categories').select('id,name,slug,icon'),
         supabase.from('brands').select('id,name,slug'),
       ]);
-
-      if (!productsRes.error && Array.isArray(productsRes.data)) {
-        rawCloud = productsRes.data;
-      }
       if (!categoriesRes.error && Array.isArray(categoriesRes.data)) {
         cloudCategories = categoriesRes.data;
       }
       if (!brandsRes.error && Array.isArray(brandsRes.data)) {
         cloudBrands = brandsRes.data;
       }
+
+      // Productos: paginados en bloques para no exceder límites de transferencia
+      let allProducts = [];
+      let page = 0;
+      let keepFetching = true;
+      while (keepFetching) {
+        const from = page * PAGE_SIZE;
+        const to   = from + PAGE_SIZE - 1;
+        const { data: pageData, error: pageError } = await supabase
+          .from('products')
+          .select(PRODUCT_COLS)
+          .range(from, to)
+          .order('created_at', { ascending: false });
+        if (pageError) { keepFetching = false; break; }
+        if (!Array.isArray(pageData) || pageData.length === 0) { keepFetching = false; break; }
+        allProducts = allProducts.concat(pageData);
+        if (pageData.length < PAGE_SIZE) keepFetching = false;
+        page++;
+      }
+      if (allProducts.length > 0) rawCloud = allProducts;
     } catch {
       // Continuar con la caché serverless / local
     }
