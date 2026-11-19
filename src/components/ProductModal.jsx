@@ -17,6 +17,8 @@ import {
   Upload,
   Globe,
   Image as ImageIcon,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { formatCurrency, buildWhatsAppUrl, storeService } from '../services/storeService';
 import {
@@ -71,6 +73,11 @@ export const ProductModal = ({
   const [newSpecTitle, setNewSpecTitle] = useState('');
   const [newSpecDetail, setNewSpecDetail] = useState('');
   const [isSavingSpecs, setIsSavingSpecs] = useState(false);
+
+  // Estados para edición de descripción
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState('');
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
 
   // Generar o normalizar array de imágenes para la galería
   // REGLA: El primer espacio corresponde siempre a la Imagen Principal
@@ -157,19 +164,20 @@ export const ProductModal = ({
   // Claves de metadata interna que NO deben mostrarse como specs públicas
   const INTERNAL_SPEC_KEYS = /^(CONDICI[OÓ]N|ETIQUETA|SKU|EAN|BARCODE|COSTO|REFERENCIA|C[OÓ]DIGO)$/i;
 
-  // Formatear especificaciones técnicas al estilo corporativo (**TÍTULO:** Detalle)
+  // Formatear especificaciones técnicas preservando el rawIdx (índice real en product.specs)
+  // para que reordenamiento y edición operen sobre el array fuente correcto.
   const formattedSpecs = (Array.isArray(product.specs) ? product.specs : [])
-    .map((spec) => formatSpecItem(spec))
-    .filter(
-      (item) =>
-        item &&
-        item.detail &&
-        !/\[object Object\]/i.test(item.detail) &&
-        !INTERNAL_SPEC_KEYS.test(item.title)
-    );
+    .map((spec, rawIdx) => {
+      const item = formatSpecItem(spec);
+      if (!item) return null;
+      if (!item.detail || /\[object Object\]/i.test(item.detail)) return null;
+      if (INTERNAL_SPEC_KEYS.test(item.title)) return null;
+      return { ...item, rawIdx };
+    })
+    .filter(Boolean);
 
-  const handleStartEditSpec = (idx, currentItem) => {
-    setEditingSpecIdx(idx);
+  const handleStartEditSpec = (rawIdx, currentItem) => {
+    setEditingSpecIdx(rawIdx);
     setSpecTitleDraft(currentItem.title || '');
     setSpecDetailDraft(currentItem.detail || '');
   };
@@ -257,6 +265,65 @@ export const ProductModal = ({
       console.warn('Error agregando característica:', err);
     } finally {
       setIsSavingSpecs(false);
+    }
+  };
+
+  // Reordenar spec: mueve el item del índice rawIdx en product.specs hacia arriba o hacia abajo
+  // rawIdx es el índice dentro de product.specs (el array completo, no el filtrado)
+  const handleMoveSpec = async (rawIdx, direction) => {
+    const currentList = Array.isArray(product.specs) ? [...product.specs] : [];
+    const targetIdx = rawIdx + direction;
+    if (targetIdx < 0 || targetIdx >= currentList.length) return;
+    // Intercambiar posiciones
+    [currentList[rawIdx], currentList[targetIdx]] = [currentList[targetIdx], currentList[rawIdx]];
+
+    if (onUpdateProductField) {
+      onUpdateProductField('specs', currentList);
+    }
+    setIsSavingSpecs(true);
+    try {
+      await storeService.updateProductAtomic({ ...product, specs: currentList });
+      if (onRefetchProducts) await onRefetchProducts();
+    } catch (err) {
+      console.warn('Error reordenando característica:', err);
+    } finally {
+      setIsSavingSpecs(false);
+    }
+  };
+
+  // Guardar descripción editada en Supabase
+  const handleSaveDescription = async () => {
+    const finalVal = descriptionDraft.trim();
+    setIsSavingDescription(true);
+    if (onUpdateProductField) {
+      onUpdateProductField('description', finalVal);
+    }
+    try {
+      await storeService.updateProductAtomic({ ...product, description: finalVal });
+      if (onRefetchProducts) await onRefetchProducts();
+    } catch (err) {
+      console.warn('Error guardando descripción:', err);
+    } finally {
+      setIsSavingDescription(false);
+      setIsEditingDescription(false);
+    }
+  };
+
+  // Eliminar descripción (dejarla vacía)
+  const handleDeleteDescription = async () => {
+    if (!window.confirm('¿Deseas eliminar la descripción de este producto?')) return;
+    setIsSavingDescription(true);
+    if (onUpdateProductField) {
+      onUpdateProductField('description', '');
+    }
+    try {
+      await storeService.updateProductAtomic({ ...product, description: '' });
+      if (onRefetchProducts) await onRefetchProducts();
+    } catch (err) {
+      console.warn('Error eliminando descripción:', err);
+    } finally {
+      setIsSavingDescription(false);
+      setIsEditingDescription(false);
     }
   };
 
@@ -753,10 +820,13 @@ export const ProductModal = ({
 
                     {/* Lista de Especificaciones */}
                     {formattedSpecs.length > 0 ? (
-                      <div className="space-y-2">
-                        {formattedSpecs.map((item, idx) => (
-                          <div key={idx} className="group flex items-start justify-between gap-2 p-1.5 rounded-lg hover:bg-slate-50 transition-colors">
-                            {editingSpecIdx === idx ? (
+                      <div className="space-y-1">
+                        {formattedSpecs.map((item, visIdx) => (
+                          <div
+                            key={item.rawIdx}
+                            className="group flex items-start justify-between gap-2 p-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                          >
+                            {editingSpecIdx === item.rawIdx ? (
                               <div className="w-full space-y-1.5 animate-fadeIn">
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                   <input
@@ -785,7 +855,7 @@ export const ProductModal = ({
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleSaveEditSpec(idx)}
+                                    onClick={() => handleSaveEditSpec(item.rawIdx)}
                                     disabled={isSavingSpecs}
                                     className="px-2.5 py-0.5 rounded bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-xs"
                                   >
@@ -795,26 +865,54 @@ export const ProductModal = ({
                               </div>
                             ) : (
                               <>
-                                <p className="text-sm text-slate-700 leading-relaxed">
+                                {/* Controles de reordenamiento ↑/↓ — siempre visibles en touch, hover en desktop */}
+                                {canEdit && (
+                                  <div className="flex flex-col gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity touch:opacity-100">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMoveSpec(item.rawIdx, -1)}
+                                      disabled={visIdx === 0 || isSavingSpecs}
+                                      className="p-0.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 transition-colors touch-manipulation"
+                                      title="Mover arriba"
+                                      aria-label="Mover característica arriba"
+                                    >
+                                      <ChevronUp className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMoveSpec(item.rawIdx, 1)}
+                                      disabled={visIdx === formattedSpecs.length - 1 || isSavingSpecs}
+                                      className="p-0.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 transition-colors touch-manipulation"
+                                      title="Mover abajo"
+                                      aria-label="Mover característica abajo"
+                                    >
+                                      <ChevronDown className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+
+                                <p className="text-sm text-slate-700 leading-relaxed flex-1 min-w-0">
                                   <strong className="text-slate-900 uppercase font-bold tracking-wide">
                                     {item.title}:
                                   </strong>{' '}
                                   {item.detail}
                                 </p>
+
+                                {/* Editar / Eliminar */}
                                 {canEdit && (
                                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
                                     <button
                                       type="button"
-                                      onClick={() => handleStartEditSpec(idx, item)}
-                                      className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                      onClick={() => handleStartEditSpec(item.rawIdx, item)}
+                                      className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors touch-manipulation"
                                       title="Editar esta característica"
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => handleDeleteSpec(idx)}
-                                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                      onClick={() => handleDeleteSpec(item.rawIdx)}
+                                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors touch-manipulation"
                                       title="Eliminar esta característica"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
@@ -832,12 +930,79 @@ export const ProductModal = ({
                       </p>
                     )}
 
-                    {/* Descripción General */}
-                    {product.description && (
+                    {/* Descripción General — Editable y Eliminable en modo Admin */}
+                    {(product.description || canEdit) && (
                       <div className="mt-3 pt-3 border-t border-slate-100">
-                        <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
-                          {product.description}
-                        </p>
+                        <div className="flex items-center justify-between mb-1.5 gap-2">
+                          <span className="text-[10px] font-mono-code font-bold uppercase tracking-wider text-slate-400">
+                            Descripción
+                          </span>
+                          {canEdit && !isEditingDescription && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDescriptionDraft(product.description || '');
+                                  setIsEditingDescription(true);
+                                }}
+                                className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors touch-manipulation"
+                                title="Editar descripción"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              {product.description && (
+                                <button
+                                  type="button"
+                                  onClick={handleDeleteDescription}
+                                  disabled={isSavingDescription}
+                                  className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors touch-manipulation"
+                                  title="Eliminar descripción"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {isEditingDescription ? (
+                          <div className="space-y-2 animate-fadeIn">
+                            <textarea
+                              value={descriptionDraft}
+                              onChange={(e) => setDescriptionDraft(e.target.value)}
+                              rows={5}
+                              placeholder="Descripción del producto..."
+                              className="w-full px-3 py-2 text-sm border border-blue-400 rounded-xl bg-white text-slate-900 outline-none focus:ring-1 focus:ring-blue-500 leading-relaxed resize-y"
+                              autoFocus
+                            />
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingDescription(false)}
+                                className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors cursor-pointer"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveDescription}
+                                disabled={isSavingDescription}
+                                className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
+                              >
+                                {isSavingDescription ? 'Guardando...' : '✓ Guardar Descripción'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          product.description && (
+                            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                              {product.description}
+                            </p>
+                          )
+                        )}
+                        {canEdit && !product.description && !isEditingDescription && (
+                          <p className="text-xs text-slate-400 italic">Sin descripción. Haz clic en ✏️ para agregar.</p>
+                        )}
                       </div>
                     )}
                   </div>
