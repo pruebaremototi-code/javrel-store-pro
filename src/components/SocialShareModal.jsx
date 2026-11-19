@@ -34,6 +34,7 @@ import {
   MessengerIcon,
   TwitterIcon,
   TelegramIcon,
+  InstagramIcon,
 } from './BrandIcons';
 import { AdPreviewCard } from './AdPreviewCard';
 import { StatusPrepModal } from './StatusPrepModal';
@@ -809,6 +810,66 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
     }
     await copyText(messengerText, 'messenger', 'Copy copiado. Pégalo en Messenger con el enlace.');
     openWindow(MESSENGER_HOME_URL);
+  };
+
+  /* ── Compartir a la historia 9:16 (visitantes y admin) ──────────────── */
+  const STORY_URLS = {
+    instagram: 'https://www.instagram.com/',
+    facebook: 'https://www.facebook.com/stories/create/',
+    tiktok: TIKTOK_UPLOAD_URL,
+    whatsapp: isMobile ? 'whatsapp://' : 'https://web.whatsapp.com/',
+    telegram: isMobile ? 'https://t.me/' : 'https://web.telegram.org/',
+    twitter: null,
+  };
+
+  const handleShareStory = async (channelKey = 'instagram') => {
+    const key = `story-${channelKey}`;
+    try {
+      setBusyKey(key);
+      try {
+        await writeTextToClipboard(productUrl);
+      } catch (_e) {}
+
+      const blob = await generateCardBlob({ format: 'story' });
+      const fileName = buildPromoFileName(product, 'story');
+      const compactText = statusText;
+
+      if (isMobile && canShare) {
+        try {
+          await shareNativePromoCard({
+            blob,
+            fileName,
+            title: `${productName} · Historia`,
+            text: compactText,
+            url: productUrl,
+          });
+          notify(key, '¡Tarjeta 9:16 lista y enlace copiado! Pégalo en el sticker de tu historia.');
+          return;
+        } catch (nativeErr) {
+          if (nativeErr?.name === 'AbortError') return;
+        }
+      }
+
+      try {
+        await copyBlobToClipboard(blob, compactText);
+      } catch (_e) {
+        downloadBlob(blob, fileName);
+      }
+
+      if (channelKey === 'twitter') {
+        openWindow(`https://twitter.com/intent/tweet?text=${encodeURIComponent(compactText)}&url=${encodeURIComponent(productUrl)}`);
+      } else if (STORY_URLS[channelKey]) {
+        openWindow(STORY_URLS[channelKey]);
+      }
+
+      notify(key, '¡Tarjeta 9:16 lista y enlace copiado! Pégalo en el sticker de tu historia.');
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      console.warn('Error al compartir a la historia:', err);
+      notify('', 'No se pudo generar la historia. Descarga el PNG 9:16 con el botón Descargar.');
+    } finally {
+      setBusyKey('');
+    }
   };
 
   const openPrepForActiveChannel = () => {
@@ -2015,47 +2076,113 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
                     </p>
                   </div>
 
-                  {/* 2. Menú de Redes Sociales (Componente Web Propio) */}
+                  {/* 2. Compartir a la Historia (9:16 Vertical) para cada red social */}
                   <div className="pt-2 border-t border-slate-100 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                        <Share2 className="w-3 h-3 text-[#0A6CFF]" />
-                        Menú de Redes Sociales
+                        <RectangleVertical className="w-3 h-3 text-[#0A6CFF]" />
+                        Compartir a la Historia (9:16 Vertical)
                       </span>
                     </div>
+                    <p className="text-[10px] text-slate-400 leading-snug -mt-1">
+                      Genera la tarjeta vertical 9:16 lista con foto y datos. El enlace se copia para el sticker de tu historia.
+                    </p>
 
                     <div className="grid grid-cols-3 gap-2">
+                      {/* Instagram */}
+                      <button
+                        type="button"
+                        onClick={() => handleShareStory('instagram')}
+                        disabled={busyKey === 'story-instagram'}
+                        title="Compartir Historia en Instagram"
+                        className="inline-flex flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-pink-50/50 hover:border-pink-300/60 hover:text-pink-600 cursor-pointer shadow-2xs group disabled:opacity-60"
+                      >
+                        {busyKey === 'story-instagram' ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-pink-500" />
+                        ) : (
+                          <InstagramIcon className="w-5 h-5 text-pink-500 group-hover:scale-110 transition-transform" />
+                        )}
+                        <span className="text-[10px]">Instagram</span>
+                      </button>
+
                       {/* Facebook */}
                       <button
                         type="button"
-                        onClick={handleShareFacebook}
-                        title="Compartir en Facebook"
-                        className="inline-flex flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-blue-50/50 hover:border-[#1877F2]/40 hover:text-[#1877F2] cursor-pointer shadow-2xs group"
+                        onClick={() => handleShareStory('facebook')}
+                        disabled={busyKey === 'story-facebook'}
+                        title="Compartir Historia en Facebook"
+                        className="inline-flex flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-blue-50/50 hover:border-[#1877F2]/40 hover:text-[#1877F2] cursor-pointer shadow-2xs group disabled:opacity-60"
                       >
-                        <FacebookIcon className="w-5 h-5 text-[#1877F2] group-hover:scale-110 transition-transform" />
-                        <span className="text-[11px]">Facebook</span>
+                        {busyKey === 'story-facebook' ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-[#1877F2]" />
+                        ) : (
+                          <FacebookIcon className="w-5 h-5 text-[#1877F2] group-hover:scale-110 transition-transform" />
+                        )}
+                        <span className="text-[10px]">Facebook</span>
                       </button>
 
-                      {/* Twitter / X */}
+                      {/* TikTok */}
                       <button
                         type="button"
-                        onClick={handleShareTwitter}
-                        title="Compartir en X / Twitter"
-                        className="inline-flex flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-100 hover:border-slate-400 hover:text-black cursor-pointer shadow-2xs group"
+                        onClick={() => handleShareStory('tiktok')}
+                        disabled={busyKey === 'story-tiktok'}
+                        title="Compartir Historia en TikTok"
+                        className="inline-flex flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-100 hover:border-slate-900/40 hover:text-slate-900 cursor-pointer shadow-2xs group disabled:opacity-60"
                       >
-                        <TwitterIcon className="w-5 h-5 text-slate-900 group-hover:scale-110 transition-transform" />
-                        <span className="text-[11px]">X / Twitter</span>
+                        {busyKey === 'story-tiktok' ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-slate-800" />
+                        ) : (
+                          <TikTokIcon className="w-5 h-5 text-slate-900 group-hover:scale-110 transition-transform" />
+                        )}
+                        <span className="text-[10px]">TikTok</span>
+                      </button>
+
+                      {/* WhatsApp Historia */}
+                      <button
+                        type="button"
+                        onClick={() => handleShareStory('whatsapp')}
+                        disabled={busyKey === 'story-whatsapp'}
+                        title="Compartir Estado / Historia en WhatsApp"
+                        className="inline-flex flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-emerald-50/50 hover:border-[#25D366]/40 hover:text-[#128C7E] cursor-pointer shadow-2xs group disabled:opacity-60"
+                      >
+                        {busyKey === 'story-whatsapp' ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-[#25D366]" />
+                        ) : (
+                          <WhatsAppIcon className="w-5 h-5 text-[#25D366] group-hover:scale-110 transition-transform" />
+                        )}
+                        <span className="text-[10px]">WhatsApp</span>
                       </button>
 
                       {/* Telegram */}
                       <button
                         type="button"
-                        onClick={handleShareTelegram}
-                        title="Compartir en Telegram"
-                        className="inline-flex flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-sky-50/50 hover:border-[#229ED9]/40 hover:text-[#229ED9] cursor-pointer shadow-2xs group"
+                        onClick={() => handleShareStory('telegram')}
+                        disabled={busyKey === 'story-telegram'}
+                        title="Compartir Historia en Telegram"
+                        className="inline-flex flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-sky-50/50 hover:border-[#229ED9]/40 hover:text-[#229ED9] cursor-pointer shadow-2xs group disabled:opacity-60"
                       >
-                        <TelegramIcon className="w-5 h-5 text-[#229ED9] group-hover:scale-110 transition-transform" />
-                        <span className="text-[11px]">Telegram</span>
+                        {busyKey === 'story-telegram' ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-[#229ED9]" />
+                        ) : (
+                          <TelegramIcon className="w-5 h-5 text-[#229ED9] group-hover:scale-110 transition-transform" />
+                        )}
+                        <span className="text-[10px]">Telegram</span>
+                      </button>
+
+                      {/* X / Twitter */}
+                      <button
+                        type="button"
+                        onClick={() => handleShareStory('twitter')}
+                        disabled={busyKey === 'story-twitter'}
+                        title="Compartir en X / Twitter"
+                        className="inline-flex flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-100 hover:border-slate-400 hover:text-black cursor-pointer shadow-2xs group disabled:opacity-60"
+                      >
+                        {busyKey === 'story-twitter' ? (
+                          <Loader2 className="w-5 h-5 animate-spin text-slate-800" />
+                        ) : (
+                          <TwitterIcon className="w-5 h-5 text-slate-900 group-hover:scale-110 transition-transform" />
+                        )}
+                        <span className="text-[10px]">X / Twitter</span>
                       </button>
                     </div>
 
@@ -2138,7 +2265,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
                         type="button"
                         onClick={() =>
                           handleNativeShare('guest-native-share', {
-                            format: 'square',
+                            format: 'story',
                             text: statusText,
                           })
                         }
