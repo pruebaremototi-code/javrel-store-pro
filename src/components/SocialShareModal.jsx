@@ -175,12 +175,21 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
   } = useVisualEditor();
 
   /**
-   * Acceso al Centro de Difusión:
-   * Habilitado al 100% para cualquier visitante de la tienda (móvil y escritorio),
-   * permitiendo previsualizar en vivo, seleccionar temas 3D, elegir formatos,
-   * copiar texto y tarjeta, descargar PNG y compartir nativamente sin requerir modo admin.
+   * Alcance de acceso al Centro de Difusión:
+   * - Administrador (hasMarketingAccess = true): control total, editor de copy en tiempo real,
+   *   estudio de estados/historias, selección de paletas 3D, y estudio de etiquetas.
+   * - Visitante (hasMarketingAccess = false): compartir limpio, seguro y directo (WhatsApp,
+   *   redes sociales, copiar texto con enlace canónico /p/:id, descargar/copiar tarjeta PNG
+   *   y Web Share API nativa), sin exponer herramientas de edición ni configuraciones internas.
    */
-  const hasMarketingAccess = true;
+  const hasMarketingAccess = useMemo(() => {
+    if (!isAdmin) return false;
+    if (isPrimary) return true;
+    if (hasPermission?.(PERMISSIONS.EDIT_PAGE)) return true;
+    if (hasPermission?.(PERMISSIONS.MANAGE_PRODUCTS)) return true;
+    if (!contextIsAdmin && Object.keys(permissions || {}).length === 0) return true;
+    return false;
+  }, [isAdmin, isPrimary, hasPermission, contextIsAdmin, permissions]);
 
   const [activeChannel, setActiveChannel] = useState('whatsapp');
   const [whatsappView, setWhatsappView] = useState('chat');
@@ -2048,6 +2057,17 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
                         <TelegramIcon className="w-5 h-5 text-[#229ED9] group-hover:scale-110 transition-transform" />
                         <span className="text-[11px]">Telegram</span>
                       </button>
+                    </div>
+
+                    {/* Previsualización del mensaje comercial para visitantes (solo lectura) */}
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span>Mensaje comercial oficial</span>
+                        <span className="text-[#0A6CFF] font-mono-code">Enlace /p/:id incluido</span>
+                      </div>
+                      <pre className="font-sans text-xs text-slate-700 whitespace-pre-wrap break-words leading-relaxed max-h-36 overflow-y-auto pr-1 [scrollbar-width:thin] select-all">
+                        {statusText}
+                      </pre>
                     </div>
 
                     {/* Copiar para Estado/WhatsApp (copy estructurado con URL cliqueable) */}
