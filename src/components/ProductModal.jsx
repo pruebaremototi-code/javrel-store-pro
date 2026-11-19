@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   MessageCircle,
@@ -37,6 +37,69 @@ const ImagePickerModal = React.lazy(() =>
 const SocialShareModal = React.lazy(() =>
   import('./SocialShareModal').then((m) => ({ default: m.SocialShareModal }))
 );
+
+// ─── AutoTextarea ────────────────────────────────────────────────────────────
+// Textarea que crece automáticamente con el contenido (auto-resize).
+// - Enter inserta salto de línea; Ctrl+Enter dispara onSave.
+// - Escape dispara onCancel.
+// - Nunca aparece una barra de scroll: el alto sigue al contenido.
+const AutoTextarea = React.forwardRef(function AutoTextarea(
+  { value, onChange, onSave, onCancel, placeholder, className = '', autoFocus = false, minRows = 2 },
+  forwardedRef
+) {
+  const internalRef = useRef(null);
+  const ref = forwardedRef || internalRef;
+
+  const resize = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(el.scrollHeight, (minRows || 1) * 26)}px`;
+  }, [ref, minRows]);
+
+  useEffect(() => {
+    resize();
+    const frame = requestAnimationFrame(resize);
+    return () => cancelAnimationFrame(frame);
+  }, [value, resize]);
+
+  // Auto-focus, cursor al final y scroll suave para evitar que el teclado móvil lo tape
+  useEffect(() => {
+    if (autoFocus && ref.current) {
+      ref.current.focus();
+      const len = ref.current.value.length;
+      ref.current.setSelectionRange(len, len);
+      resize();
+      setTimeout(() => {
+        ref.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    }
+  }, [autoFocus, ref, resize]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      onSave?.();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onCancel?.();
+    }
+  };
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={(e) => { onChange(e.target.value); resize(); }}
+      onInput={resize}
+      onKeyDown={handleKeyDown}
+      placeholder={placeholder}
+      rows={minRows}
+      style={{ resize: 'none', overflow: 'hidden' }}
+      className={`w-full whitespace-pre-wrap break-words leading-relaxed box-border transition-all duration-150 ${className}`}
+    />
+  );
+});
 
 export const ProductModal = ({
   product,
@@ -782,38 +845,46 @@ export const ProductModal = ({
                     {canEdit && isAddingSpec && (
                       <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2 animate-fadeIn">
                         <div className="font-bold text-xs text-blue-900">Nueva Característica:</div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          <input
-                            type="text"
+                        <div className="space-y-2">
+                          <AutoTextarea
                             value={newSpecTitle}
-                            onChange={(e) => setNewSpecTitle(e.target.value)}
+                            onChange={setNewSpecTitle}
+                            onSave={handleCreateNewSpec}
+                            onCancel={() => setIsAddingSpec(false)}
                             placeholder="Título (ej: Procesador)"
+                            minRows={1}
+                            autoFocus
                             className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 font-semibold"
                           />
-                          <input
-                            type="text"
+                          <AutoTextarea
                             value={newSpecDetail}
-                            onChange={(e) => setNewSpecDetail(e.target.value)}
-                            placeholder="Detalle (ej: Intel Core i7 16GB)"
-                            className="sm:col-span-2 px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500"
+                            onChange={setNewSpecDetail}
+                            onSave={handleCreateNewSpec}
+                            onCancel={() => setIsAddingSpec(false)}
+                            placeholder="Detalle (ej: Intel Core i7 — Ctrl+Enter para guardar)"
+                            minRows={2}
+                            className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500"
                           />
                         </div>
-                        <div className="flex items-center justify-end gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => setIsAddingSpec(false)}
-                            className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors cursor-pointer"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleCreateNewSpec}
-                            disabled={isSavingSpecs || !newSpecDetail.trim()}
-                            className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
-                          >
-                            {isSavingSpecs ? 'Guardando...' : 'Guardar Característica'}
-                          </button>
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <span className="text-[10px] text-slate-400 hidden sm:block">Ctrl+Enter para guardar · Esc para cancelar</span>
+                          <div className="flex items-center gap-2 ml-auto">
+                            <button
+                              type="button"
+                              onClick={() => setIsAddingSpec(false)}
+                              className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors cursor-pointer touch-manipulation"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCreateNewSpec}
+                              disabled={isSavingSpecs || !newSpecDetail.trim()}
+                              className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs touch-manipulation"
+                            >
+                              {isSavingSpecs ? 'Guardando...' : 'Guardar Característica'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -827,40 +898,45 @@ export const ProductModal = ({
                             className="group flex items-start justify-between gap-2 p-1.5 rounded-lg hover:bg-slate-50 transition-colors"
                           >
                             {editingSpecIdx === item.rawIdx ? (
-                              <div className="w-full space-y-1.5 animate-fadeIn">
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                  <input
-                                    type="text"
-                                    value={specTitleDraft}
-                                    onChange={(e) => setSpecTitleDraft(e.target.value)}
-                                    placeholder="Título"
-                                    className="px-2.5 py-1 text-xs bg-white border border-blue-400 rounded-lg font-bold outline-none"
-                                  />
-                                  <input
-                                    type="text"
-                                    value={specDetailDraft}
-                                    onChange={(e) => setSpecDetailDraft(e.target.value)}
-                                    placeholder="Detalle"
-                                    className="sm:col-span-2 px-2.5 py-1 text-xs bg-white border border-blue-400 rounded-lg outline-none"
-                                    autoFocus
-                                  />
-                                </div>
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingSpecIdx(null)}
-                                    className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300"
-                                  >
-                                    ✕
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSaveEditSpec(item.rawIdx)}
-                                    disabled={isSavingSpecs}
-                                    className="px-2.5 py-0.5 rounded bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-xs"
-                                  >
-                                    ✓ Guardar
-                                  </button>
+                              <div className="w-full space-y-2 animate-fadeIn">
+                                <AutoTextarea
+                                  value={specTitleDraft}
+                                  onChange={setSpecTitleDraft}
+                                  onSave={() => handleSaveEditSpec(item.rawIdx)}
+                                  onCancel={() => setEditingSpecIdx(null)}
+                                  placeholder="Título de la característica"
+                                  minRows={1}
+                                  className="px-2.5 py-1 text-xs bg-white border border-blue-400 rounded-lg font-bold outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                                <AutoTextarea
+                                  value={specDetailDraft}
+                                  onChange={setSpecDetailDraft}
+                                  onSave={() => handleSaveEditSpec(item.rawIdx)}
+                                  onCancel={() => setEditingSpecIdx(null)}
+                                  placeholder="Detalle completo (Ctrl+Enter para guardar)"
+                                  minRows={2}
+                                  autoFocus
+                                  className="px-2.5 py-1 text-xs bg-white border border-blue-400 rounded-lg outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] text-slate-400 hidden sm:block">Ctrl+Enter para guardar · Esc para cancelar</span>
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingSpecIdx(null)}
+                                      className="px-2.5 py-1 rounded-lg bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300 touch-manipulation"
+                                    >
+                                      ✕ Cancelar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveEditSpec(item.rawIdx)}
+                                      disabled={isSavingSpecs}
+                                      className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-xs touch-manipulation"
+                                    >
+                                      {isSavingSpecs ? 'Guardando...' : '✓ Guardar'}
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             ) : (
@@ -891,7 +967,7 @@ export const ProductModal = ({
                                   </div>
                                 )}
 
-                                <p className="text-sm text-slate-700 leading-relaxed flex-1 min-w-0">
+                                <p className="text-sm text-slate-700 leading-relaxed flex-1 min-w-0 whitespace-pre-line break-words">
                                   <strong className="text-slate-900 uppercase font-bold tracking-wide">
                                     {item.title}:
                                   </strong>{' '}
@@ -967,30 +1043,35 @@ export const ProductModal = ({
 
                         {isEditingDescription ? (
                           <div className="space-y-2 animate-fadeIn">
-                            <textarea
+                            <AutoTextarea
                               value={descriptionDraft}
-                              onChange={(e) => setDescriptionDraft(e.target.value)}
-                              rows={5}
-                              placeholder="Descripción del producto..."
-                              className="w-full px-3 py-2 text-sm border border-blue-400 rounded-xl bg-white text-slate-900 outline-none focus:ring-1 focus:ring-blue-500 leading-relaxed resize-y"
+                              onChange={setDescriptionDraft}
+                              onSave={handleSaveDescription}
+                              onCancel={() => setIsEditingDescription(false)}
+                              placeholder="Descripción completa del producto (Ctrl+Enter para guardar)..."
+                              minRows={3}
                               autoFocus
+                              className="px-3 py-2 text-sm border border-blue-400 rounded-xl bg-white text-slate-900 outline-none focus:ring-1 focus:ring-blue-500"
                             />
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setIsEditingDescription(false)}
-                                className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors cursor-pointer"
-                              >
-                                Cancelar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleSaveDescription}
-                                disabled={isSavingDescription}
-                                className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
-                              >
-                                {isSavingDescription ? 'Guardando...' : '✓ Guardar Descripción'}
-                              </button>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] text-slate-400 hidden sm:block">Enter = salto de línea · Ctrl+Enter = guardar · Esc = cancelar</span>
+                              <div className="flex items-center gap-2 ml-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsEditingDescription(false)}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors cursor-pointer touch-manipulation"
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleSaveDescription}
+                                  disabled={isSavingDescription}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs touch-manipulation"
+                                >
+                                  {isSavingDescription ? 'Guardando...' : '✓ Guardar Descripción'}
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ) : (
@@ -1031,14 +1112,15 @@ export const ProductModal = ({
 
                       {isEditingWarranty ? (
                         <div className="space-y-1.5 animate-fadeIn">
-                          <input
-                            type="text"
+                          <AutoTextarea
                             value={warrantyVal}
-                            onChange={(e) => setWarrantyVal(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSaveWarranty()}
+                            onChange={setWarrantyVal}
+                            onSave={handleSaveWarranty}
+                            onCancel={() => setIsEditingWarranty(false)}
                             placeholder="Ej. Garantía Oficial 12 Meses"
-                            className="w-full px-2.5 py-1 text-xs border border-blue-400 rounded-lg bg-white text-slate-900 outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+                            minRows={1}
                             autoFocus
+                            className="px-2.5 py-1 text-xs border border-blue-400 rounded-lg bg-white text-slate-900 outline-none focus:ring-1 focus:ring-blue-500 font-medium"
                           />
                           <div className="flex items-center justify-between text-[10px]">
                             <label className="flex items-center gap-1 text-slate-500 cursor-pointer select-none">
@@ -1054,14 +1136,14 @@ export const ProductModal = ({
                               <button
                                 type="button"
                                 onClick={() => setIsEditingWarranty(false)}
-                                className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 font-semibold cursor-pointer"
+                                className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 font-semibold cursor-pointer touch-manipulation"
                               >
                                 ✕
                               </button>
                               <button
                                 type="button"
                                 onClick={handleSaveWarranty}
-                                className="px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 font-bold cursor-pointer"
+                                className="px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 font-bold cursor-pointer touch-manipulation"
                               >
                                 ✓
                               </button>
@@ -1071,7 +1153,7 @@ export const ProductModal = ({
                       ) : (
                         <p
                           onClick={() => canEdit && setIsEditingWarranty(true)}
-                          className={`font-semibold text-slate-800 ${
+                          className={`font-semibold text-slate-800 whitespace-pre-line break-words ${
                             canEdit ? 'cursor-pointer hover:text-blue-600' : ''
                           }`}
                           title={canEdit ? 'Haz clic para editar' : undefined}
@@ -1102,14 +1184,15 @@ export const ProductModal = ({
 
                       {isEditingShipping ? (
                         <div className="space-y-1.5 animate-fadeIn">
-                          <input
-                            type="text"
+                          <AutoTextarea
                             value={shippingVal}
-                            onChange={(e) => setShippingVal(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSaveShipping()}
+                            onChange={setShippingVal}
+                            onSave={handleSaveShipping}
+                            onCancel={() => setIsEditingShipping(false)}
                             placeholder="Ej. Envíos Asegurados a Colombia"
-                            className="w-full px-2.5 py-1 text-xs border border-emerald-400 rounded-lg bg-white text-slate-900 outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                            minRows={1}
                             autoFocus
+                            className="px-2.5 py-1 text-xs border border-emerald-400 rounded-lg bg-white text-slate-900 outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
                           />
                           <div className="flex items-center justify-between text-[10px]">
                             <label className="flex items-center gap-1 text-slate-500 cursor-pointer select-none">
@@ -1125,14 +1208,14 @@ export const ProductModal = ({
                               <button
                                 type="button"
                                 onClick={() => setIsEditingShipping(false)}
-                                className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 font-semibold cursor-pointer"
+                                className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 font-semibold cursor-pointer touch-manipulation"
                               >
                                 ✕
                               </button>
                               <button
                                 type="button"
                                 onClick={handleSaveShipping}
-                                className="px-2 py-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 font-bold cursor-pointer"
+                                className="px-2 py-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 font-bold cursor-pointer touch-manipulation"
                               >
                                 ✓
                               </button>
@@ -1142,7 +1225,7 @@ export const ProductModal = ({
                       ) : (
                         <p
                           onClick={() => canEdit && setIsEditingShipping(true)}
-                          className={`font-semibold text-slate-800 ${
+                          className={`font-semibold text-slate-800 whitespace-pre-line break-words ${
                             canEdit ? 'cursor-pointer hover:text-emerald-600' : ''
                           }`}
                           title={canEdit ? 'Haz clic para editar' : undefined}

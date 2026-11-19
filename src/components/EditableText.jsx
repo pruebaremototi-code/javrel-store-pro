@@ -90,6 +90,10 @@ export const EditableText = ({
       e.preventDefault();
       commitText(e.currentTarget.innerText);
       e.currentTarget.blur();
+    } else if (multiline && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      commitText(e.currentTarget.innerText);
+      e.currentTarget.blur();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       if (elementRef.current) {
@@ -143,6 +147,8 @@ export const EditableText = ({
       onTouchStart={stopCardInteraction}
       data-placeholder={placeholder}
       className={`jr-editable relative transition-all duration-200 outline-none cursor-text ${
+        multiline ? 'whitespace-pre-wrap break-words ' : ''
+      }${
         isFocused
           ? 'outline-dashed outline-2 outline-[#0A6CFF] outline-offset-2 bg-blue-50/20 rounded shadow-xs'
           : 'hover:outline-dashed hover:outline-2 hover:outline-[#0A6CFF]/80 hover:outline-offset-2 hover:bg-blue-50/10 rounded'
