@@ -647,6 +647,13 @@ export function App() {
 
     try {
       const saved = await storeService.saveProduct(newProduct);
+      if (!saved?.savedInSupabase) {
+        showToast(`❌ Error al guardar en Supabase: ${saved?.error || 'Revisa permisos'}. El producto se mantendrá en borrador local.`);
+        setHasPendingChanges(true);
+        setPendingCount((c) => c + 1);
+        return;
+      }
+
       const persisted = saved?.product ? { ...newProduct, ...saved.product } : newProduct;
       const finalList = [
         persisted,
@@ -661,16 +668,12 @@ export function App() {
         await loadStoreData(false);
       }
 
-      showToast(
-        saved?.savedInSupabase
-          ? '✅ Producto publicado con galería sincronizada en Supabase.'
-          : '✅ Producto publicado en el catálogo. Revisa la conexión con Supabase.'
-      );
+      showToast('✅ Producto publicado y sincronizado permanentemente en Supabase.');
     } catch (err) {
       console.warn('Error persistiendo producto nuevo:', err);
       setHasPendingChanges(true);
       setPendingCount((c) => c + 1);
-      showToast('Producto agregado. Presiona "Guardar en Supabase" para reintentar la sincronización.');
+      showToast(`❌ Error al crear producto: ${err.message || 'Presiona Guardar en Supabase para reintentar.'}`);
     }
   };
 
@@ -683,7 +686,11 @@ export function App() {
 
     try {
       // 1. Harddelete directo en Supabase + eliminación en Storage + notificación atómica a /api/sync-store
-      await storeService.deleteProduct(productId);
+      const delResult = await storeService.deleteProduct(productId);
+      if (delResult && !delResult.supabaseDeleted && delResult.error) {
+        showToast(`❌ Error al eliminar de Supabase: ${delResult.error}`);
+        return;
+      }
 
       // 2. Limpiar estado reactivo local
       const updated = products.filter((p) => String(p.id).trim() !== String(productId).trim());
@@ -694,9 +701,7 @@ export function App() {
       showToast('✅ Producto eliminado permanentemente de Supabase y Storage.');
     } catch (err) {
       console.warn('Error al eliminar producto:', err);
-      const updated = products.filter((p) => String(p.id).trim() !== String(productId).trim());
-      setProducts(updated);
-      showToast('⚠️ Producto eliminado del catálogo local.');
+      showToast(`❌ Error al eliminar producto: ${err.message}`);
     }
   };
 
@@ -815,28 +820,35 @@ export function App() {
 
   // Guardar Cambios Obligatorio en Supabase y Sincronización Global Multi-Dispositivo
   const handleSaveChangesInSitu = async () => {
+    // Forzar confirmación de inputs numéricos o textos en edición activa
+    if (typeof document !== 'undefined' && document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    await new Promise((r) => setTimeout(r, 60));
+
     setIsSaving(true);
     try {
-      const { supabaseSuccess, visualFieldsSynced, products: normalized } =
+      const { supabaseSuccess, supabaseError, visualFieldsSynced, products: normalized } =
         await storeService.syncAllToSupabaseAndGlobal(products, categories, config);
-      if (Array.isArray(normalized)) setProducts(normalized);
-      setHasPendingChanges(false);
-      setPendingCount(0);
 
-      if (supabaseSuccess && visualFieldsSynced) {
-        showToast('¡Todos los campos sincronizados en Supabase y propagados a los dispositivos!');
-      } else if (supabaseSuccess) {
-        showToast(
-          'Cambios guardados en Supabase. Marca/etiquetas/especificaciones quedaron en persistencia local: ejecuta database/04_product_visual_fields.sql para sincronizarlas también.'
-        );
+      if (Array.isArray(normalized) && normalized.length > 0) {
+        setProducts(normalized);
+      }
+
+      if (supabaseSuccess) {
+        setHasPendingChanges(false);
+        setPendingCount(0);
+        showToast('✅ ¡Todos los cambios han sido guardados y sincronizados permanentemente en Supabase!');
       } else {
+        // NO limpiar cambios pendientes si Supabase rechazó la persistencia
+        console.error('[App] Sincronización con Supabase rechazada:', supabaseError);
         showToast(
-          'Cambios guardados localmente y en la caché global. Supabase rechazó la escritura: ejecuta database/08_fix_catalog_persistence.sql para habilitar RLS y el esquema de texto.'
+          `❌ Error al guardar en Supabase: ${supabaseError || 'La base de datos rechazó la consulta'}. Los cambios se mantienen pendientes.`
         );
       }
     } catch (err) {
       console.error('Error saving changes:', err);
-      showToast('Cambios guardados localmente y en la caché global.');
+      showToast(`❌ Error al guardar cambios en Supabase: ${err.message || 'Error de conexión'}.`);
     } finally {
       setIsSaving(false);
     }
@@ -1055,7 +1067,7 @@ export function App() {
       />
 
       {/* Catálogo de Productos con Experiencia Móvil de Alta Gama & Desktop Full-Width */}
-      <main ref={catalogRef} className="relative z-10 flex-1 w-full max-w-[1920px] mx-auto px-3 sm:px-5 lg:px-6 xl:pl-4 xl:pr-6 2xl:pl-6 2xl:pr-8 py-6 sm:py-8">
+      <main ref={catalogRef} className={`relative z-10 flex-1 w-full max-w-[1920px] mx-auto px-3 sm:px-5 lg:px-6 xl:pl-4 xl:pr-6 2xl:pl-6 2xl:pr-8 py-6 sm:py-8 ${isAdmin ? 'pb-28 sm:pb-20' : ''}`}>
         <div className="flex flex-col lg:flex-row items-start gap-4 lg:gap-5 xl:gap-5">
           {/* Sidebar Lateral de Categorías Fijo y Flotante (Sticky fluido al hacer scroll) */}
           <div className="hidden lg:block self-start sticky top-24 z-30 transition-all duration-300">

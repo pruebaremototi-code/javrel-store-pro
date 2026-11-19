@@ -96,7 +96,7 @@ const buildProductPayload = (
     ? String(resolvedBrandId || product.brandId).trim()
     : null;
 
-  const mainImage = sanitizeImageUrl(product.image || product.image_url || '');
+  const mainImage = sanitizeImageUrl(product.image || product.image_url || '') || '/zafra/logo-menu.webp';
   const secondaryImages = (
     Array.isArray(product.images)
       ? product.images.filter((img) => img && typeof img === 'string' && img !== (product.image || product.image_url || ''))
@@ -107,7 +107,7 @@ const buildProductPayload = (
 
   const payload = {
     id: cleanId,
-    title: product.name || product.title || '',
+    title: String(product.name || product.title || 'Producto').trim(),
     price: Number(product.price || 0),
     original_price:
       product.originalPrice !== null &&
@@ -122,8 +122,6 @@ const buildProductPayload = (
       product.whatsappLink ||
       product.whatsapp_link ||
       getStoreWhatsAppLink(),
-    // category_id debe ser UUID en producción. Si no se pudo resolver, se omite
-    // para no romper el upsert completo por "invalid input syntax for type uuid".
     description: sanitizeCommercialText(product.description || ''),
     stock: Number(product.stock ?? 10),
   };
@@ -134,12 +132,17 @@ const buildProductPayload = (
   if (includeVisualFields) {
     payload.brand = cleanBrand(product.brand, '') || null;
     payload.badge = product.commercialTag || product.badge || '';
-    payload.condition = product.condition || 'Nuevo';
-    payload.commercial_tag = product.commercialTag || product.badge || '';
 
+    // Preservar condición física y etiquetas comerciales dentro de specs (JSONB)
+    // para garantizar persistencia fiel sin provocar error 42703 por columnas no nativas.
     let specs = Array.isArray(product.specs) ? [...product.specs] : [];
+    const conditionVal = product.condition || 'Nuevo';
     if (!specs.some((s) => typeof s === 'object' && s?.key === 'CONDICIÓN')) {
-      specs.push({ key: 'CONDICIÓN', value: product.condition || 'Nuevo' });
+      specs.push({ key: 'CONDICIÓN', value: conditionVal });
+    }
+    const commTag = product.commercialTag || product.badge;
+    if (commTag && !specs.some((s) => typeof s === 'object' && s?.key === 'ETIQUETA')) {
+      specs.push({ key: 'ETIQUETA', value: commTag });
     }
     payload.specs = specs;
     payload.rating = product.rating !== undefined ? Number(product.rating) : 5.0;
@@ -641,10 +644,8 @@ export const storeService = {
     }
 
     // 2. Supabase es la fuente de verdad definitiva: productos + categorías + marcas.
-    // Se seleccionan solo las columnas necesarias y se pagina en bloques de 200
-    // para evitar transferencias masivas (el SDK de Supabase no pagina automáticamente).
-    const PRODUCT_COLS =
-      'id,title,name,price,original_price,image_url,additional_images,condition,commercial_tag,badge,category_id,category,description,stock,specs,brand,brand_id,rating,reviews,featured,is_featured,reference,sku';
+    // Se selecciona '*' paginado en bloques de 200 para obtener las columnas existentes reales
+    // sin fallar por nombres de columna incompatibles.
     const PAGE_SIZE = 200;
     try {
       // Categorías y marcas: tablas pequeñas, se leen completas
@@ -668,18 +669,22 @@ export const storeService = {
         const to   = from + PAGE_SIZE - 1;
         const { data: pageData, error: pageError } = await supabase
           .from('products')
-          .select(PRODUCT_COLS)
+          .select('*')
           .range(from, to)
           .order('created_at', { ascending: false });
-        if (pageError) { keepFetching = false; break; }
+        if (pageError) {
+          console.warn('[storeService] Error leyendo productos de Supabase:', pageError.message);
+          keepFetching = false;
+          break;
+        }
         if (!Array.isArray(pageData) || pageData.length === 0) { keepFetching = false; break; }
         allProducts = allProducts.concat(pageData);
         if (pageData.length < PAGE_SIZE) keepFetching = false;
         page++;
       }
       if (allProducts.length > 0) rawCloud = allProducts;
-    } catch {
-      // Continuar con la caché serverless / local
+    } catch (fetchErr) {
+      console.warn('[storeService] Error conectando con Supabase:', fetchErr);
     }
 
     const categoryById = new Map(
@@ -853,6 +858,7 @@ export const storeService = {
     if (resolvedBrandId) finalProduct.brandId = resolvedBrandId;
 
     // Intentar inserción/actualización directa en Supabase
+    let supabaseError = null;
     try {
       const fullPayload = buildProductPayload(
         finalProduct,
@@ -860,30 +866,34 @@ export const storeService = {
         resolvedCategoryId,
         resolvedBrandId
       );
-      let { error } = await supabase.from('products').upsert(fullPayload).select();
+      let { data, error } = await supabase.from('products').upsert(fullPayload).select();
 
       if (error) {
-        // La tabla puede no tener aún las columnas visuales (brand/badge/specs).
-        console.warn('[storeService] Upsert visual falló, reintentando esquema base:', error.message);
+        console.warn('[storeService] Upsert Supabase devolvió error:', error.message);
+        supabaseError = error.message;
+        // Intento de rescate con payload base
         const fallback = await supabase
           .from('products')
           .upsert(buildProductPayload(finalProduct, false, resolvedCategoryId, resolvedBrandId))
           .select();
-        if (!fallback.error) {
+        if (!fallback.error && Array.isArray(fallback.data) && fallback.data.length > 0) {
           savedInSupabase = true;
+          visualFieldsSynced = false;
+          supabaseError = null;
         } else {
-          console.warn('[storeService] Upsert base falló:', fallback.error.message);
+          console.error('[storeService] Upsert Supabase falló definitivamente:', fallback.error?.message || error.message);
+          supabaseError = fallback.error?.message || error.message;
         }
       } else {
         savedInSupabase = true;
         visualFieldsSynced = true;
       }
     } catch (err) {
-      console.warn('[storeService] Excepción guardando producto en Supabase:', err);
+      console.error('[storeService] Excepción guardando producto en Supabase:', err);
+      supabaseError = err.message;
     }
 
-    // Actualizar localStorage sin pasar por la nube (evita que un fetch lento
-    // sobrescriba el alta recién creada).
+    // Actualizar localStorage
     try {
       const raw = JSON.parse(localStorage.getItem(STORAGE_KEYS.PRODUCTS) || '[]');
       const existing = Array.isArray(raw) ? raw : [];
@@ -901,7 +911,7 @@ export const storeService = {
       localStorage.setItem(STORAGE_KEYS.LAST_SYNC, '0');
 
       // Sincronización multi-dispositivo inmediata vía endpoint serverless
-      if (typeof window !== 'undefined' && window.fetch) {
+      if (savedInSupabase && typeof window !== 'undefined' && window.fetch) {
         window
           .fetch('/api/sync-store', {
             method: 'POST',
@@ -918,7 +928,7 @@ export const storeService = {
       console.error('Error saving in localStorage:', e);
     }
 
-    return { product: finalProduct, savedInSupabase, visualFieldsSynced };
+    return { product: finalProduct, savedInSupabase, visualFieldsSynced, error: supabaseError };
   },
 
   // Actualización Atómica y Verificación de Filas Afectadas en Supabase (Multi-Dispositivo Inmediato)
@@ -984,6 +994,7 @@ export const storeService = {
 
     let rowsAffected = 0;
     let savedInSupabase = false;
+    let lastError = null;
 
     // 1. UPDATE atómico en Supabase con confirmación de filas afectadas (.select())
     try {
@@ -994,7 +1005,7 @@ export const storeService = {
         resolvedBrandId
       );
 
-      // Intento A: Update completo con todas las columnas
+      // Intento A: Update directo por id
       const { data, error } = await supabase
         .from('products')
         .update(fullPayload)
@@ -1005,44 +1016,32 @@ export const storeService = {
         rowsAffected = data.length;
         savedInSupabase = true;
       } else {
-        // Intento B: Si falló por columnas no reconocidas en caché de esquema,
-        // intentar con el payload base garantizando precio, oferta, imágenes y descripción.
-        console.warn(
-          '[storeService] updateProductAtomic intento A falló, probando fallback:',
-          error?.message
-        );
-        const basePayload = buildProductPayload(
-          finalProduct,
-          false,
-          resolvedCategoryId,
-          resolvedBrandId
-        );
-        const { data: baseData, error: baseErr } = await supabase
+        if (error) {
+          console.warn('[storeService] updateProductAtomic intento A falló:', error.message);
+          lastError = error.message;
+        }
+
+        // Intento B: Si la fila aún no existía en Supabase o afectó 0 filas, intentar upsert
+        const { data: upsertData, error: upsertErr } = await supabase
           .from('products')
-          .update(basePayload)
-          .eq('id', cleanId)
+          .upsert(fullPayload)
           .select();
 
-        if (!baseErr && Array.isArray(baseData) && baseData.length > 0) {
-          rowsAffected = baseData.length;
+        if (!upsertErr && Array.isArray(upsertData) && upsertData.length > 0) {
+          rowsAffected = upsertData.length;
           savedInSupabase = true;
-        } else {
-          // Intento C: Si la fila aún no existía en Supabase, hacer upsert
-          const { data: upsertData, error: upsertErr } = await supabase
-            .from('products')
-            .upsert(fullPayload)
-            .select();
-          if (!upsertErr && Array.isArray(upsertData) && upsertData.length > 0) {
-            rowsAffected = upsertData.length;
-            savedInSupabase = true;
-          }
+          lastError = null;
+        } else if (upsertErr) {
+          console.warn('[storeService] updateProductAtomic intento B (upsert) falló:', upsertErr.message);
+          lastError = upsertErr.message;
         }
       }
     } catch (err) {
-      console.warn('[storeService] Excepción en updateProductAtomic:', err);
+      console.error('[storeService] Excepción en updateProductAtomic:', err);
+      lastError = err.message;
     }
 
-    // 2. Persistencia inmediata en localStorage (evita desfases en el cliente actual)
+    // 2. Persistencia en localStorage
     try {
       const raw = JSON.parse(localStorage.getItem(STORAGE_KEYS.PRODUCTS) || '[]');
       const existing = Array.isArray(raw) ? raw : [];
@@ -1060,23 +1059,26 @@ export const storeService = {
       console.error('Error saving in localStorage:', e);
     }
 
-    // 3. Invalidación forzada e inmediata de caché en la Serverless Function multi-dispositivo
-    try {
-      await fetch('/api/sync-store', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          products: [finalProduct],
-        }),
-      });
-    } catch (syncErr) {
-      console.warn('[storeService] Sync serverless call:', syncErr);
+    // 3. Sincronización multi-dispositivo inmediata
+    if (savedInSupabase) {
+      try {
+        await fetch('/api/sync-store', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            products: [finalProduct],
+          }),
+        });
+      } catch (syncErr) {
+        console.warn('[storeService] Sync serverless call:', syncErr);
+      }
     }
 
     return {
-      success: savedInSupabase || rowsAffected > 0,
+      success: savedInSupabase && rowsAffected > 0,
       rowsAffected,
       product: finalProduct,
+      error: lastError,
     };
   },
 
@@ -1163,57 +1165,61 @@ export const storeService = {
       }
     }
 
-    // 5. Upsert obligatorio en Supabase (lotes + reintento de esquema base)
+    // 5. Upsert obligatorio en Supabase (lotes estructurados)
+    let supabaseError = null;
     try {
       const fullPayload = preparedProducts.map((p) =>
         buildProductPayload(p, true, p.category, p.brandId)
       );
-      const corePayload = preparedProducts.map((p) =>
-        buildProductPayload(p, false, p.category, p.brandId)
-      );
 
-      const CHUNK_SIZE = 40;
-      let anySaved = false;
-      let allVisualFields = true;
+      const CHUNK_SIZE = 30;
+      let totalSaved = 0;
 
       for (let i = 0; i < fullPayload.length; i += CHUNK_SIZE) {
         const fullChunk = fullPayload.slice(i, i + CHUNK_SIZE);
-        const coreChunk = corePayload.slice(i, i + CHUNK_SIZE);
-
-        let { data: savedData, error } = await supabase.from('products').upsert(fullChunk).select();
+        const { data: savedData, error } = await supabase.from('products').upsert(fullChunk).select();
 
         if (error) {
-          console.warn(
-            'Upsert visual en Supabase no disponible; reintentando esquema base:',
-            error.message
-          );
-          const fallback = await supabase.from('products').upsert(coreChunk).select();
-          if (!fallback.error) {
-            anySaved = true;
-            allVisualFields = false;
-          } else if (isUuidColumnError(fallback.error)) {
-            // Reintento producto a producto para aislar filas conflictivas.
-            for (const single of fullChunk) {
-              const singleRes = await supabase.from('products').upsert(single).select();
-              if (!singleRes.error) anySaved = true;
+          console.warn('[storeService] Error en lote Supabase:', error.message);
+          supabaseError = error.message;
+
+          // Reintento fila a fila para aislar el error y salvar el resto
+          for (const single of fullChunk) {
+            const singleRes = await supabase.from('products').upsert(single).select();
+            if (!singleRes.error && Array.isArray(singleRes.data) && singleRes.data.length > 0) {
+              totalSaved++;
+            } else if (singleRes.error) {
+              supabaseError = singleRes.error.message;
             }
           }
-        } else if (savedData && savedData.length > 0) {
-          anySaved = true;
+        } else if (savedData && Array.isArray(savedData)) {
+          totalSaved += savedData.length;
         } else {
-          anySaved = true;
+          totalSaved += fullChunk.length;
         }
       }
 
-      supabaseSuccess = anySaved;
-      visualFieldsSynced = anySaved && allVisualFields;
+      if (totalSaved >= fullPayload.length) {
+        supabaseSuccess = true;
+        visualFieldsSynced = true;
+        supabaseError = null;
+      } else if (totalSaved > 0) {
+        supabaseSuccess = true;
+        visualFieldsSynced = true;
+      } else {
+        supabaseSuccess = false;
+        visualFieldsSynced = false;
+      }
     } catch (err) {
-      console.warn('Supabase batch upsert:', err);
+      console.error('[storeService] Supabase batch upsert excepción:', err);
+      supabaseSuccess = false;
+      supabaseError = err.message;
     }
 
     return {
-      success: true,
+      success: supabaseSuccess,
       supabaseSuccess,
+      supabaseError,
       visualFieldsSynced,
       products: preparedProducts,
     };
@@ -1330,18 +1336,22 @@ export const storeService = {
 
     // 3. BORRADO DURO ESTRICTO EN SUPABASE — DELETE FROM products WHERE id = strId
     let supabaseDeleted = false;
+    let deleteError = null;
     try {
       const { error } = await supabase.from('products').delete().eq('id', strId);
       if (!error) {
         supabaseDeleted = true;
       } else {
+        deleteError = error.message;
         console.warn('[storeService] Supabase DELETE error:', error.message);
       }
-      // Intento secundario con columna numérica si el id es numérico
-      if (!isNaN(Number(strId))) {
-        await supabase.from('products').delete().eq('id', Number(strId));
+      // Intento secundario con columna numérica si el id es numérico y no borró
+      if (!supabaseDeleted && !isNaN(Number(strId))) {
+        const numRes = await supabase.from('products').delete().eq('id', Number(strId));
+        if (!numRes.error) supabaseDeleted = true;
       }
     } catch (err) {
+      deleteError = err.message;
       console.warn('[storeService] Excepción en DELETE Supabase:', err);
     }
 
@@ -1374,7 +1384,7 @@ export const storeService = {
       console.error('[storeService] Error eliminando de localStorage:', e);
     }
 
-    return { success: true, supabaseDeleted };
+    return { success: supabaseDeleted, supabaseDeleted, error: deleteError };
   },
 
   // Barrido de Registros Fantasma (Orphan Sweep) — Limpia desde Supabase registros
@@ -1433,11 +1443,19 @@ export const storeService = {
     ids.forEach((id) => this.registerPurgedProduct(id));
 
     // 3. BORRADO DURO EN SUPABASE — DELETE FROM products WHERE id IN (ids)
+    let batchErr = null;
     try {
-      await supabase.from('products').delete().in('id', idsArray);
-    } catch {
-      // Si .in() falla, intentar uno a uno
-      for (const id of ids) {
+      const { error } = await supabase.from('products').delete().in('id', idsArray);
+      if (error) {
+        batchErr = error.message;
+        // Si .in() falla, intentar uno a uno
+        for (const id of idsArray) {
+          try { await supabase.from('products').delete().eq('id', id); } catch {}
+        }
+      }
+    } catch (err) {
+      batchErr = err.message;
+      for (const id of idsArray) {
         try { await supabase.from('products').delete().eq('id', id); } catch {}
       }
     }
@@ -1466,7 +1484,7 @@ export const storeService = {
       }
     } catch {}
 
-    return { success: true, count: ids.length };
+    return { success: !batchErr, count: idsArray.length, error: batchErr };
   },
 
   // Obtener Personalizaciones Visuales In-Context (store_customizations)

@@ -60,6 +60,12 @@ export const WixEditorTopBar = ({
   const anyPending = hasPendingChanges || storePendingChanges;
 
   const handleSaveAll = async () => {
+    // Forzar confirmación de inputs numéricos o textos en edición activa
+    if (typeof document !== 'undefined' && document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    await new Promise((r) => setTimeout(r, 50));
+
     // 1. Guardar personalizaciones de texto de Supabase
     if (hasPendingChanges) {
       await saveAllCustomizations();

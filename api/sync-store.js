@@ -45,12 +45,10 @@ export default async function handler(req, res) {
     const to    = from + limit - 1;
 
     try {
-      // 1. Intentar consultar Supabase en vivo — columnas estrictamente necesarias + rango paginado
-      const PRODUCT_COLUMNS =
-        'id,title,name,price,original_price,image_url,additional_images,condition,commercial_tag,badge,category_id,category,description,stock,specs,brand,brand_id,rating,reviews,featured,is_featured';
+      // 1. Intentar consultar Supabase en vivo — select('*') paginado
       const { data: dbProducts, error: pError } = await supabase
         .from('products')
-        .select(PRODUCT_COLUMNS)
+        .select('*')
         .range(from, to)
         .order('created_at', { ascending: false });
       const { data: dbCategories, error: cError } = await supabase

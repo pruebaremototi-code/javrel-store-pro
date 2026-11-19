@@ -38,8 +38,9 @@ export const EditablePrice = ({
     }
   }, [value, isFocused]);
 
-  const commitPrice = () => {
-    const digits = String(draft).replace(/[^\d]/g, '');
+  const commitPrice = (customDraft) => {
+    const rawVal = customDraft !== undefined ? customDraft : draft;
+    const digits = String(rawVal).replace(/[^\d]/g, '');
 
     if (!digits) {
       if (allowEmpty) {
@@ -55,8 +56,22 @@ export const EditablePrice = ({
     const numericValue = Number(digits);
     if (!Number.isNaN(numericValue) && numericValue !== Number(value)) {
       onChange?.(numericValue);
-    } else {
-      setDraft(String(numericValue));
+    }
+    setDraft(String(numericValue));
+  };
+
+  const handleInputChange = (e) => {
+    const digits = e.target.value.replace(/[^\d]/g, '');
+    setDraft(digits);
+    // Notificación reactiva inmediata: asegura que tanto en celular como en PC
+    // el estado quede confirmado antes de que el usuario pulse "Guardar Cambios".
+    if (digits) {
+      const numericVal = Number(digits);
+      if (!Number.isNaN(numericVal) && numericVal !== Number(value)) {
+        onChange?.(numericVal);
+      }
+    } else if (allowEmpty) {
+      onChange?.(null);
     }
   };
 
@@ -71,6 +86,7 @@ export const EditablePrice = ({
       onDoubleClick={stopCardInteraction}
       onMouseDown={stopCardInteraction}
       onPointerDown={stopCardInteraction}
+      onTouchStart={stopCardInteraction}
     >
       <span className={`text-[10px] font-black ${symbolClass}`}>$</span>
       <input
@@ -78,16 +94,18 @@ export const EditablePrice = ({
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck="false"
         data-price-field={label}
         value={draft}
         placeholder={placeholder}
         aria-label={`Editar ${label}`}
         title={`Editar ${label} in-situ`}
-        onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ''))}
+        onChange={handleInputChange}
         onFocus={(e) => {
           setIsFocused(true);
           const input = e.currentTarget;
-          // Un solo clic deja el valor listo para reemplazar.
           requestAnimationFrame(() => input.select());
         }}
         onBlur={() => {
@@ -98,6 +116,7 @@ export const EditablePrice = ({
           e.stopPropagation();
           if (e.key === 'Enter') {
             e.preventDefault();
+            commitPrice();
             e.currentTarget.blur();
           } else if (e.key === 'Escape') {
             e.preventDefault();
@@ -109,6 +128,7 @@ export const EditablePrice = ({
         onDoubleClick={stopCardInteraction}
         onMouseDown={stopCardInteraction}
         onPointerDown={stopCardInteraction}
+        onTouchStart={stopCardInteraction}
         className={`min-w-0 flex-1 w-full bg-transparent text-[11px] font-bold font-display outline-none ${inputClass}`}
       />
       <span

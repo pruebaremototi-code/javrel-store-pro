@@ -115,6 +115,7 @@ export const EditableText = ({
       data-editor-field={id || field || undefined}
       aria-label={`Editar ${id || field || 'texto'}`}
       onFocus={() => setIsFocused(true)}
+      onInput={(e) => commitText(e.currentTarget.innerText)}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
@@ -122,6 +123,7 @@ export const EditableText = ({
       onDoubleClick={stopCardInteraction}
       onMouseDown={stopCardInteraction}
       onPointerDown={stopCardInteraction}
+      onTouchStart={stopCardInteraction}
       data-placeholder={placeholder}
       className={`jr-editable relative transition-all duration-200 outline-none cursor-text ${
         isFocused

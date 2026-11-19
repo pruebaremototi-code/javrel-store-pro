@@ -707,10 +707,18 @@ export const InPlaceEditorToolbar = ({
     }
   };
 
+  const handleTriggerSave = async () => {
+    if (typeof document !== 'undefined' && document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    await new Promise((r) => setTimeout(r, 50));
+    onSaveChanges?.();
+  };
+
   return (
     <>
-      {/* Barra Flotante Inferior In-Situ (Optimizada y Delgada) */}
-      <div className="fixed bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 z-40 w-[96%] sm:w-auto max-w-5xl bg-white/95 backdrop-blur-md border border-slate-200/90 shadow-[0_10px_35px_rgba(0,0,0,0.12)] rounded-2xl sm:rounded-full py-1.5 px-2.5 sm:px-3.5 flex items-center justify-between gap-2 sm:gap-2.5 animate-slideUp">
+      {/* Barra Flotante Inferior In-Situ (Optimizada, Delgada y Accesible en Móvil) */}
+      <div className="fixed bottom-2 sm:bottom-3 left-1/2 -translate-x-1/2 z-50 w-[96%] sm:w-auto max-w-5xl bg-white/95 backdrop-blur-md border border-slate-200/90 shadow-[0_10px_35px_rgba(0,0,0,0.12)] rounded-2xl sm:rounded-full py-1.5 px-2.5 sm:px-3.5 flex items-center justify-between gap-2 sm:gap-2.5 animate-slideUp touch-manipulation">
         {/* Identidad y Estado de Sesión Compacto */}
         <div className="flex items-center gap-2 min-w-0">
           <div className="relative flex items-center justify-center w-7 h-7 rounded-xl bg-[#2563eb] text-white shadow-xs shrink-0">
@@ -796,9 +804,9 @@ export const InPlaceEditorToolbar = ({
           {/* Botón Guardar Cambios (Resaltado y Compacto) */}
           {(canEditPage || canManageProducts) && (
             <button
-              onClick={onSaveChanges}
+              onClick={handleTriggerSave}
               disabled={isSaving}
-              className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[11px] font-bold transition-all shadow-sm active:scale-95 cursor-pointer ${
+              className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[11px] font-bold transition-all shadow-sm active:scale-95 cursor-pointer touch-manipulation ${
                 hasPendingChanges
                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/25 ring-2 ring-emerald-400/40 animate-pulse'
                   : 'bg-[#0064fe] hover:bg-[#0052cc] text-white shadow-blue-500/20'
@@ -829,9 +837,9 @@ export const InPlaceEditorToolbar = ({
         <div className="flex sm:hidden items-center gap-1.5 shrink-0">
           {(canEditPage || canManageProducts) && (
             <button
-              onClick={onSaveChanges}
+              onClick={handleTriggerSave}
               disabled={isSaving}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold transition-all shadow-md ${
+              className={`inline-flex items-center justify-center gap-1.5 min-h-[42px] px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 touch-manipulation cursor-pointer ${
                 hasPendingChanges
                   ? 'bg-emerald-600 text-white ring-2 ring-emerald-400/40 animate-pulse'
                   : 'bg-[#0A6CFF] text-white'

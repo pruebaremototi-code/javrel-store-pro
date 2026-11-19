@@ -1082,6 +1082,14 @@ export const AdminOrdersDashboard = ({
     // Actualización atómica en Supabase con confirmación de filas afectadas
     const res = await storeService.updateProductAtomic(productToSave);
 
+    if (!res.success) {
+      showNotification(
+        `❌ Error al actualizar en Supabase: ${res.error || 'Verifica RLS y conexión a la base de datos'}.`,
+        'error'
+      );
+      return;
+    }
+
     if (onUpdateProductField) {
       onUpdateProductField(productToSave.id, 'name', productToSave.name);
       onUpdateProductField(productToSave.id, 'reference', skuVal);
