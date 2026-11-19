@@ -637,6 +637,92 @@ export const storeService = {
     } catch {}
   },
 
+  // Obtener un producto individual por ID, slug o referencia (para enlaces directos /p/:id)
+  async getProductById(id) {
+    if (!id) return null;
+    const cleanId = String(id).trim();
+
+    // 1. Buscar en caché local de productos (memoria / localStorage)
+    const local = this.getProductsFromStorage();
+    if (Array.isArray(local) && local.length > 0) {
+      const match = local.find(
+        (p) =>
+          String(p.id) === cleanId ||
+          (p.slug && String(p.slug).toLowerCase() === cleanId.toLowerCase()) ||
+          (p.reference && String(p.reference).toLowerCase() === cleanId.toLowerCase())
+      );
+      if (match) return match;
+    }
+
+    // 2. Consultar directamente a Supabase
+    try {
+      // Buscar primero por id exacto
+      let { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', cleanId)
+        .limit(1)
+        .maybeSingle();
+
+      // Si no hubo coincidencia por id, intentar por slug o referencia
+      if (!data) {
+        const alt = await supabase
+          .from('products')
+          .select('*')
+          .or(`slug.eq.${cleanId},reference.eq.${cleanId}`)
+          .limit(1)
+          .maybeSingle();
+        if (alt?.data) data = alt.data;
+      }
+
+      if (data) {
+        const specsList = Array.isArray(data.specs) ? data.specs : [];
+        const findSpecVal = (keyName) => {
+          const found = specsList.find(
+            (s) => typeof s === 'object' && s !== null && (s.key === keyName || s.title === keyName)
+          );
+          return found?.value || found?.detail || null;
+        };
+
+        const mainImage = data.image_url || data.image || '/zafra/logo-menu.webp';
+        const secondaryImages = Array.isArray(data.additional_images)
+          ? data.additional_images.filter((img) => img && typeof img === 'string')
+          : [];
+
+        return {
+          id: data.id,
+          name: data.title || data.name || 'Producto',
+          category: data.category_id || data.category || 'computadores',
+          brand: data.brand || '',
+          condition: data.condition || findSpecVal('CONDICIÓN') || findSpecVal('CONDICION') || 'Nuevo',
+          commercialTag: data.commercial_tag || data.badge || findSpecVal('ETIQUETA') || '',
+          price: Number(data.price) || 0,
+          originalPrice: Number(data.original_price ?? data.originalPrice) || 0,
+          cost: data.cost !== undefined && data.cost !== null ? data.cost : findSpecVal('COSTO'),
+          stock: Number(data.stock ?? 10),
+          image: mainImage,
+          images: [mainImage, ...secondaryImages.filter((img) => img !== mainImage)],
+          specs: specsList,
+          description: data.description || '',
+          rating: Number(data.rating || 5.0),
+          reviews: Number(data.reviews || 0),
+          featured: Boolean(data.featured || data.is_featured),
+          badge: data.badge || data.commercial_tag || '',
+          reference: data.sku || data.reference || findSpecVal('SKU') || findSpecVal('REFERENCIA') || '',
+          sku: data.sku || data.reference || findSpecVal('SKU') || '',
+          barcode: data.barcode || data.ean || findSpecVal('EAN') || '',
+          ean: data.barcode || data.ean || findSpecVal('EAN') || '',
+          warrantyText: findSpecVal('GARANTÍA') || findSpecVal('GARANTIA') || 'Garantía Oficial 12 Meses',
+          shippingText: findSpecVal('DESPACHO') || findSpecVal('ENVÍOS') || 'Envíos Asegurados a Colombia',
+        };
+      }
+    } catch (err) {
+      console.warn('[storeService.getProductById] Error consultando producto directo:', err);
+    }
+
+    return null;
+  },
+
   // Obtener Productos con Prioridad en la Nube (Multi-Dispositivo Inmediato)
   async getProducts(options = {}) {
     const { forceFresh = false } = options;

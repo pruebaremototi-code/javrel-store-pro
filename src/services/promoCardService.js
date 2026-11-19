@@ -2124,13 +2124,36 @@ const buildCardData = (product, config, ctaText, badgeConfig = null) => {
     ? Math.max(1, Math.round(((regular - offer) / regular) * 100))
     : 0;
 
+  // Si no hay descripción, extraer las especificaciones técnicas principales como resumen
+  let desc = sanitizeCommercialText(product?.description || '').slice(0, 220).trim();
+  if (!desc && Array.isArray(product?.specs) && product.specs.length > 0) {
+    const cleanSpecs = product.specs
+      .map((s) => {
+        if (typeof s === 'string') return s.replace(/\[object Object\]/g, '').trim();
+        if (typeof s === 'object' && s !== null) {
+          const k = String(s.title || s.key || '').trim();
+          const v = String(s.detail !== undefined ? s.detail : s.value !== undefined ? s.value : '')
+            .replace(/\[object Object\]/g, '')
+            .trim();
+          return k ? `${k}: ${v}` : v;
+        }
+        return '';
+      })
+      .filter((s) => s && !/^(CONDICI|ETIQUETA|SKU|EAN|BARCODE|COSTO)/i.test(s));
+    desc = cleanSpecs.slice(0, 2).join(' · ');
+  }
+
+  const origin = typeof window !== 'undefined' ? (window.location.origin || 'https://javrelstore.vercel.app') : 'https://javrelstore.vercel.app';
+  const storeDomain = origin.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+
   return {
     storeName: String(config?.storeName || 'JavrelStore').trim(),
+    storeDomain,
     productName: String(product?.name || 'Producto destacado').trim(),
     brand: String(product?.brand || '').trim(),
     condition: String(product?.condition || 'Nuevo').trim(),
     commercialTag: String(product?.commercialTag || product?.badge || '').trim(),
-    description: sanitizeCommercialText(product?.description || '').slice(0, 220).trim(),
+    description: desc,
     offer,
     regular,
     hasRegular,
@@ -2160,18 +2183,45 @@ const waitForFonts = async () => {
   }
 };
 
-const loadImageSafe = (src) =>
+const loadImageSafe = (src, timeoutMs = 4000) =>
   new Promise((resolve) => {
     if (!src) {
       resolve(null);
       return;
     }
     const image = new Image();
-    if (/^https?:\/\//i.test(src)) image.crossOrigin = 'anonymous';
+    let timer = null;
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      image.onload = null;
+      image.onerror = null;
+    };
+
+    timer = setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, timeoutMs);
+
+    // Activar crossOrigin solo si es URL HTTP/HTTPS externa para permitir canvas toBlob()
+    if (/^https?:\/\//i.test(src)) {
+      image.crossOrigin = 'anonymous';
+    }
     image.decoding = 'async';
     image.referrerPolicy = 'no-referrer';
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
+
+    image.onload = () => {
+      cleanup();
+      resolve(image);
+    };
+
+    image.onerror = () => {
+      cleanup();
+      // Si la carga con crossOrigin falla por restricción del servidor externo,
+      // resolver null de forma segura para usar el respaldo gráfico sin romper el canvas
+      resolve(null);
+    };
+
     image.src = src;
   });
 
@@ -2304,8 +2354,22 @@ export const canvasToBlob = (canvas, type = 'image/png', quality = 0.95) =>
   });
 
 export async function renderPromoCardToBlob(options) {
-  const canvas = await renderPromoCard(options);
-  return canvasToBlob(canvas);
+  try {
+    const canvas = await renderPromoCard(options);
+    return await canvasToBlob(canvas);
+  } catch (error) {
+    console.warn('[renderPromoCardToBlob] Fallo de renderizado canvas (posible bloqueo CORS), reintentando con respaldo gráfico seguro:', error);
+    try {
+      // Reintentar sin la imagen remota que pueda haber contaminado el lienzo (tainted canvas)
+      const fallbackCanvas = await renderPromoCard({
+        ...options,
+        imageUrl: STORE_LOGO_URL,
+      });
+      return await canvasToBlob(fallbackCanvas);
+    } catch (fallbackError) {
+      throw error;
+    }
+  }
 }
 
 export const buildPromoFileName = (product, format = 'square') => {

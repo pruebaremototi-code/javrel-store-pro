@@ -46,43 +46,96 @@ const getPriceInfo = (product) => {
 };
 
 /**
- * Copy comercial minimalista de alto impacto:
- * nombre del artículo, precio de oferta con descuento, CTA corta y enlace
- * directo a la ficha. Sin bloques técnicos, viñetas ni relleno.
+ * Copy comercial omnicanal de alto impacto y máxima claridad:
+ * Incluye nombre del artículo, insignia/etiqueta, precios (oferta y regular si aplica),
+ * características/especificaciones destacadas o descripción, y enlace directo clickable /p/:id.
  */
 const buildMinimalCopy = (
   product,
-  { bold = false, cta = 'Ver ficha completa', emoji = '👉' } = {}
+  { bold = false, cta = 'Ver ficha completa y comprar', emoji = '👉' } = {}
 ) => {
-  const { offer, hasRegular, discount } = getPriceInfo(product);
+  const { offer, regular, hasRegular, discount } = getPriceInfo(product);
   const name = getProductName(product);
   const price = formatCurrency(offer);
+  const regularPriceStr = hasRegular ? formatCurrency(regular) : '';
+  const tag = (product?.commercialTag || product?.badge || '').trim();
+  const brand = (product?.brand || '').trim();
 
-  const title = bold ? `🚀 *${name}*` : `🚀 ${name}`;
-  const priceLine = hasRegular
-    ? `🔥 ${bold ? `*${price}*` : price} · ${discount}% OFF`
-    : `🔥 ${bold ? `*${price}*` : price}`;
+  const lines = [];
 
-  return [title, '', priceLine, '', `${emoji} ${cta}`, buildProductShareUrl(product)].join('\n');
+  // 1. Título e insignia
+  const tagPrefix = tag ? `[${tag.toUpperCase()}] ` : '';
+  const brandText = brand ? ` · ${brand}` : '';
+  lines.push(bold ? `🚀 *${tagPrefix}${name}${brandText}*` : `🚀 ${tagPrefix}${name}${brandText}`);
+
+  // 2. Precios
+  lines.push('');
+  if (hasRegular) {
+    if (bold) {
+      lines.push(`🔥 *Precio de Oferta: ${price}* (${discount}% OFF)`);
+      lines.push(`💵 Precio Regular: ~${regularPriceStr}~`);
+    } else {
+      lines.push(`🔥 Precio de Oferta: ${price} (${discount}% OFF)`);
+      lines.push(`💵 Precio Regular: ${regularPriceStr}`);
+    }
+  } else {
+    lines.push(bold ? `🔥 *Precio: ${price}*` : `🔥 Precio: ${price}`);
+  }
+
+  // 3. Características / Especificaciones destacadas o descripción
+  const specsList = Array.isArray(product?.specs) ? product.specs : [];
+  const cleanSpecs = [];
+  for (const s of specsList) {
+    let specText = '';
+    if (typeof s === 'string') {
+      const clean = s.replace(/\[object Object\]/g, '').trim();
+      if (clean && !/^(CONDICI|ETIQUETA|SKU|EAN|BARCODE|COSTO)/i.test(clean)) {
+        specText = clean;
+      }
+    } else if (typeof s === 'object' && s !== null) {
+      const k = String(s.title || s.key || '').trim();
+      const v = String(s.detail !== undefined ? s.detail : s.value !== undefined ? s.value : '')
+        .replace(/\[object Object\]/g, '')
+        .trim();
+      if (v && !/^(CONDICI|ETIQUETA|SKU|EAN|BARCODE|COSTO)/i.test(k)) {
+        specText = k ? `${k}: ${v}` : v;
+      }
+    }
+    if (specText) cleanSpecs.push(specText);
+    if (cleanSpecs.length >= 3) break;
+  }
+
+  if (cleanSpecs.length > 0) {
+    lines.push('');
+    lines.push(bold ? '✨ *Características:*' : '✨ Características:');
+    cleanSpecs.forEach((spec) => {
+      lines.push(`  ✓ ${spec}`);
+    });
+  } else if (product?.description) {
+    const cleanDesc = String(product.description)
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 160);
+    if (cleanDesc) {
+      lines.push('');
+      lines.push(`📝 ${cleanDesc}...`);
+    }
+  }
+
+  // 4. Enlace directo completo y clickable
+  lines.push('');
+  lines.push(`${emoji} ${cta}:`);
+  lines.push(buildProductShareUrl(product));
+
+  return lines.join('\n');
 };
 
 export const buildWhatsAppShareText = (product) =>
+  buildMinimalCopy(product, { bold: true, cta: 'Ver ficha completa y comprar' });
+
+export const buildWhatsAppStatusText = (product) =>
   buildMinimalCopy(product, { bold: true, cta: 'Ver ficha completa' });
-
-export const buildWhatsAppStatusText = (product) => {
-  const { offer, hasRegular, discount } = getPriceInfo(product);
-  const price = formatCurrency(offer);
-  const priceLine = hasRegular ? `🔥 *${price}* · ${discount}% OFF` : `🔥 *${price}*`;
-
-  return [
-    `🚀 *${getProductName(product)}*`,
-    '',
-    priceLine,
-    '',
-    '👉 Ver ficha completa',
-    buildProductShareUrl(product),
-  ].join('\n');
-};
 
 export const buildFacebookShareText = (product) =>
   buildMinimalCopy(product, { cta: 'Ver ficha completa' });

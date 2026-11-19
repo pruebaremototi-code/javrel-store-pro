@@ -175,20 +175,12 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
   } = useVisualEditor();
 
   /**
-   * Acceso a las herramientas de marketing (copy editable, 12 paletas 3D,
-   * estudio de estados). Solo el administrador principal o un colaborador
-   * con permisos de edición/catálogo lo obtienen; el cliente final nunca.
+   * Acceso al Centro de Difusión:
+   * Habilitado al 100% para cualquier visitante de la tienda (móvil y escritorio),
+   * permitiendo previsualizar en vivo, seleccionar temas 3D, elegir formatos,
+   * copiar texto y tarjeta, descargar PNG y compartir nativamente sin requerir modo admin.
    */
-  const hasMarketingAccess = useMemo(() => {
-    if (!isAdmin) return false;
-    if (isPrimary) return true;
-    if (hasPermission?.(PERMISSIONS.EDIT_PAGE)) return true;
-    if (hasPermission?.(PERMISSIONS.MANAGE_PRODUCTS)) return true;
-    // Contexto sin sesión granular (dashboard administrativo o pruebas):
-    // se confía en el prop explícito `isAdmin`.
-    if (!contextIsAdmin && Object.keys(permissions || {}).length === 0) return true;
-    return false;
-  }, [isAdmin, isPrimary, hasPermission, contextIsAdmin, permissions]);
+  const hasMarketingAccess = true;
 
   const [activeChannel, setActiveChannel] = useState('whatsapp');
   const [whatsappView, setWhatsappView] = useState('chat');
@@ -835,7 +827,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
   };
 
   const handlePreviewCta = () => {
-    if (!hasMarketingAccess) {
+    if (!isAdmin) {
       openWindow(productUrl);
       return;
     }

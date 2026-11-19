@@ -382,10 +382,8 @@ export function App() {
     init();
   }, []);
 
-  // 1b. Deep link de producto compartido: /?product_id=<id> o /?producto=<id> abre su ficha.
+  // 1b. Deep link de producto compartido: /p/:id o /?product_id=<id> abre su ficha inmediatamente.
   useEffect(() => {
-    if (!Array.isArray(products) || products.length === 0) return;
-
     let sharedId = '';
     try {
       const searchParams = new URLSearchParams(window.location.search);
@@ -398,7 +396,9 @@ export function App() {
         '';
 
       if (!sharedId && window.location.pathname.startsWith('/p/')) {
-        sharedId = decodeURIComponent(window.location.pathname.replace(/^\/p\//, '')).trim();
+        sharedId = decodeURIComponent(window.location.pathname.replace(/^\/p\//, '')).replace(/\/$/, '').trim();
+      } else if (!sharedId && window.location.pathname.startsWith('/producto/')) {
+        sharedId = decodeURIComponent(window.location.pathname.replace(/^\/producto\//, '')).replace(/\/$/, '').trim();
       }
     } catch {
       sharedId = '';
@@ -406,16 +406,34 @@ export function App() {
 
     if (!sharedId || sharedProductHandledRef.current === sharedId) return;
 
-    const match = products.find(
-      (item) =>
-        String(item.id) === String(sharedId) ||
-        (item.slug && String(item.slug).toLowerCase() === String(sharedId).toLowerCase()) ||
-        (item.reference && String(item.reference).toLowerCase() === String(sharedId).toLowerCase())
-    );
-    if (!match) return;
+    // A) Si ya tenemos la lista de productos cargada en memoria, buscar coincidencia inmediata
+    if (Array.isArray(products) && products.length > 0) {
+      const match = products.find(
+        (item) =>
+          String(item.id) === String(sharedId) ||
+          (item.slug && String(item.slug).toLowerCase() === String(sharedId).toLowerCase()) ||
+          (item.reference && String(item.reference).toLowerCase() === String(sharedId).toLowerCase())
+      );
+      if (match) {
+        sharedProductHandledRef.current = sharedId;
+        setSelectedProduct(match);
+        return;
+      }
+    }
 
-    sharedProductHandledRef.current = sharedId;
-    setSelectedProduct(match);
+    // B) Si no está en la lista en memoria (enlace directo o producto fuera de vista inicial),
+    // consultar atómicamente a Supabase para cargarlo de inmediato y evitar pantalla en blanco
+    (async () => {
+      try {
+        const directProd = await storeService.getProductById(sharedId);
+        if (directProd) {
+          sharedProductHandledRef.current = sharedId;
+          setSelectedProduct(directProd);
+        }
+      } catch (err) {
+        console.warn('Error resolviendo producto por enlace directo:', err);
+      }
+    })();
   }, [products]);
 
   // 2. Mecanismo de sincronización en caliente multi-dispositivo (al reenfocar la ventana o cada 45s)
