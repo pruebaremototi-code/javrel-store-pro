@@ -14,11 +14,11 @@ import {
 import { buildWhatsAppUrl } from '../services/storeService';
 import { EditableText } from './EditableText';
 
-export const Footer = ({ config, onSecretAdminClick }) => {
+export const Footer = ({ config = {}, onSecretAdminClick }) => {
   const appVersion = import.meta.env.VITE_APP_VERSION || 'dev';
   const whatsappUrl = buildWhatsAppUrl(
-    config.whatsappNumber,
-    `${config.whatsappWelcomeMsg || '¡Hola JavrelStore!'} Me gustaría consultar información sobre garantías, envíos o catálogo.`
+    config?.whatsappNumber,
+    `${config?.whatsappWelcomeMsg || '¡Hola JavrelStore!'} Me gustaría consultar información sobre garantías, envíos o catálogo.`
   );
 
   const brands = [

@@ -6,7 +6,7 @@
 // profesional. Después redirige al visitante a la ficha interactiva del SPA.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const FALLBACK_ORIGIN = 'https://mercado-tecnologico.vercel.app';
+const FALLBACK_ORIGIN = 'https://javrelstore.vercel.app';
 const STORE_NAME = 'JavrelStore';
 const DEFAULT_IMAGE = '/zafra/banner-teclado.jpg';
 const DEFAULT_SUPABASE_URL = 'https://mnwockpzhhbcavqehrdy.supabase.co';
@@ -123,6 +123,10 @@ async function fetchProduct(id) {
 }
 
 export default async function handler(req, res) {
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const host = req.headers.host || new URL(FALLBACK_ORIGIN).host;
+  const origin = `${forwardedProto || 'https'}://${host}`;
+
   const id = String(
     req.query?.id ||
     req.query?.product_id ||
@@ -130,6 +134,26 @@ export default async function handler(req, res) {
     req.query?.producto ||
     ''
   ).trim();
+
+  // Las personas van directo a la ficha interactiva del SPA (en milisegundos, sin esperar
+  // a la base de datos ni provocar retrasos). Los rastreadores sociales sí reciben el HTML con Open Graph.
+  const userAgent = String(req.headers['user-agent'] || '').trim();
+  const isSocialCrawler =
+    /^WhatsApp\//i.test(userAgent) ||
+    /facebookexternalhit|facebot|twitterbot|telegrambot|linkedinbot|slackbot|discordbot|pinterest|googlebot|bingbot/i.test(
+      userAgent
+    );
+
+  if (!isSocialCrawler) {
+    const redirectUrl = id
+      ? `${origin}/?product_id=${encodeURIComponent(id)}`
+      : `${origin}/`;
+    res.statusCode = 302;
+    res.setHeader('Location', redirectUrl);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return res.end();
+  }
+
   let product = null;
 
   if (id) {
@@ -139,10 +163,6 @@ export default async function handler(req, res) {
       console.warn('[ProductShareOG] No se pudo consultar el producto:', error?.message);
     }
   }
-
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  const host = req.headers.host || new URL(FALLBACK_ORIGIN).host;
-  const origin = `${forwardedProto || 'https'}://${host}`;
 
   const name = cleanText(product?.title || product?.name || 'Tecnología prémium', 120);
   const brand = cleanText(product?.brand || STORE_NAME, 60);
@@ -172,26 +192,6 @@ export default async function handler(req, res) {
   const shareUrl = id
     ? `${origin}/?product_id=${encodeURIComponent(id)}`
     : `${origin}/`;
-  const redirectUrl = id
-    ? `${origin}/?product_id=${encodeURIComponent(id)}`
-    : `${origin}/`;
-
-  // Las personas van directo a la ficha interactiva del SPA (sin página
-  // intermedia). Los rastreadores sociales sí reciben el HTML con Open Graph
-  // para que WhatsApp/Facebook muestren la tarjeta del producto.
-  const userAgent = String(req.headers['user-agent'] || '').trim();
-  const isSocialCrawler =
-    /^WhatsApp\//i.test(userAgent) ||
-    /facebookexternalhit|facebot|twitterbot|telegrambot|linkedinbot|slackbot|discordbot|pinterest|googlebot|bingbot/i.test(
-      userAgent
-    );
-
-  if (!isSocialCrawler) {
-    res.statusCode = 302;
-    res.setHeader('Location', redirectUrl);
-    res.setHeader('Cache-Control', 'no-store');
-    return res.end();
-  }
 
   const discount = hasOffer
     ? Math.max(1, Math.round(((originalPrice - price) / originalPrice) * 100))

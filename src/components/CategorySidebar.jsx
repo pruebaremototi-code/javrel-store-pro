@@ -53,51 +53,58 @@ export const CategorySidebar = ({
   // Generar lista consolidada de categorías dinámicas basadas en productos y configuración
   const dynamicCategories = useMemo(() => {
     const map = new Map();
+    const safeProducts = Array.isArray(products) ? products : [];
+    const safeCategories = Array.isArray(categories) ? categories : [];
 
     // 1. Siempre incluir 'Todo el catálogo' primero
     map.set('all', {
       id: 'all',
       name: 'Todo el catálogo',
-      count: products.length,
+      count: safeProducts.length,
       icon: LayoutGrid,
     });
 
     // 2. Incorporar categorías configuradas
-    categories.forEach((cat) => {
-      if (cat.id !== 'all') {
-        const catName = cat.name || cat.id;
-        const count = products.filter(
-          (p) =>
-            (p.category && p.category.toLowerCase() === cat.id.toLowerCase()) ||
-            (p.category && p.category.toLowerCase() === catName.toLowerCase())
-        ).length;
+    safeCategories.forEach((cat) => {
+      if (!cat) return;
+      const catId = String(cat.id || '').trim();
+      if (!catId || catId.toLowerCase() === 'all') return;
+      const catName = String(cat.name || catId).trim();
+      const catIdLower = catId.toLowerCase();
+      const catNameLower = catName.toLowerCase();
 
-        map.set(cat.id.toLowerCase(), {
-          id: cat.id,
-          name: catName,
-          count: count,
-          icon: getCategoryIcon(cat.id, catName),
-        });
-      }
+      const count = safeProducts.filter((p) => {
+        if (!p) return false;
+        const pCat = String(p.category || '').toLowerCase().trim();
+        return pCat === catIdLower || pCat === catNameLower;
+      }).length;
+
+      map.set(catIdLower, {
+        id: catId,
+        name: catName,
+        count: count,
+        icon: getCategoryIcon(catId, catName),
+      });
     });
 
     // 3. Descubrir categorías de productos existentes que no estén en la configuración
-    products.forEach((p) => {
-      if (p.category && p.category.trim()) {
-        const key = p.category.toLowerCase().trim();
-        if (!map.has(key)) {
-          const displayName = p.category.charAt(0).toUpperCase() + p.category.slice(1);
-          const count = products.filter(
-            (item) => item.category && item.category.toLowerCase().trim() === key
-          ).length;
+    safeProducts.forEach((p) => {
+      if (!p) return;
+      const rawCat = String(p.category || '').trim();
+      if (!rawCat || rawCat.toLowerCase() === 'all') return;
+      const key = rawCat.toLowerCase();
+      if (!map.has(key)) {
+        const displayName = rawCat.charAt(0).toUpperCase() + rawCat.slice(1);
+        const count = safeProducts.filter(
+          (item) => item && String(item.category || '').toLowerCase().trim() === key
+        ).length;
 
-          map.set(key, {
-            id: key,
-            name: displayName,
-            count: count,
-            icon: getCategoryIcon(key, displayName),
-          });
-        }
+        map.set(key, {
+          id: key,
+          name: displayName,
+          count: count,
+          icon: getCategoryIcon(key, displayName),
+        });
       }
     });
 
@@ -132,8 +139,7 @@ export const CategorySidebar = ({
           {dynamicCategories.map((cat) => {
             const IconComponent = cat.icon;
             const isSelected =
-              activeCategory === cat.id ||
-              (activeCategory && activeCategory.toLowerCase() === cat.id.toLowerCase());
+              String(activeCategory || '').toLowerCase() === String(cat?.id || '').toLowerCase();
 
             return (
               <button

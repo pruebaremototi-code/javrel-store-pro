@@ -3,15 +3,15 @@ import { MessageCircle, Check, ArrowRight } from 'lucide-react';
 import { buildWhatsAppUrl } from '../services/storeService';
 import confetti from 'canvas-confetti';
 
-export const WhatsAppRail = ({ config }) => {
+export const WhatsAppRail = ({ config = {} }) => {
   const [progress, setProgress] = useState(0);
   const [isDone, setIsDone] = useState(false);
   const railRef = useRef(null);
   const isDragging = useRef(false);
 
   const whatsappUrl = buildWhatsAppUrl(
-    config.whatsappNumber,
-    `¡Hola ${config.storeName}! Vengo de la tienda virtual y me gustaría cotizar un producto.`
+    config?.whatsappNumber,
+    `¡Hola ${config?.storeName || 'JavrelStore'}! Vengo de la tienda virtual y me gustaría cotizar un producto.`
   );
 
   const triggerConnect = () => {

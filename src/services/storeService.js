@@ -637,43 +637,78 @@ export const storeService = {
     } catch {}
   },
 
-  // Obtener un producto individual por ID, slug o referencia (para enlaces directos /p/:id)
-  async getProductById(id) {
+  // Recupera la lista de productos almacenada en localStorage de forma segura
+  getProductsFromStorage() {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return [];
+      const raw = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  },
+
+  // Obtener un producto individual por ID, código, referencia o SKU (para enlaces directos /p/:id)
+  async getProductById(id, { timeoutMs = 6000 } = {}) {
     if (!id) return null;
     const cleanId = String(id).trim();
+    if (!cleanId) return null;
 
-    // 1. Buscar en caché local de productos (memoria / localStorage)
+    // 1. Buscar en caché local de productos (memoria / localStorage) primero
     const local = this.getProductsFromStorage();
     if (Array.isArray(local) && local.length > 0) {
       const match = local.find(
         (p) =>
-          String(p.id) === cleanId ||
-          (p.slug && String(p.slug).toLowerCase() === cleanId.toLowerCase()) ||
-          (p.reference && String(p.reference).toLowerCase() === cleanId.toLowerCase())
+          p &&
+          (String(p.id).trim() === cleanId ||
+            (p.reference && String(p.reference).toLowerCase().trim() === cleanId.toLowerCase()) ||
+            (p.sku && String(p.sku).toLowerCase().trim() === cleanId.toLowerCase()) ||
+            (p.barcode && String(p.barcode).toLowerCase().trim() === cleanId.toLowerCase()) ||
+            (p.ean && String(p.ean).toLowerCase().trim() === cleanId.toLowerCase()))
       );
       if (match) return match;
     }
 
-    // 2. Consultar directamente a Supabase
+    // 2. Consultar directamente a Supabase con timeout controlado (5-8s) para no bloquear la tienda
     try {
-      // Buscar primero por id exacto
-      let { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', cleanId)
-        .limit(1)
-        .maybeSingle();
+      const fetchPromise = (async () => {
+        let data = null;
 
-      // Si no hubo coincidencia por id, intentar por slug o referencia
-      if (!data) {
-        const alt = await supabase
-          .from('products')
-          .select('*')
-          .or(`slug.eq.${cleanId},reference.eq.${cleanId}`)
-          .limit(1)
-          .maybeSingle();
-        if (alt?.data) data = alt.data;
-      }
+        // Solo buscar por id si es UUID válido (en PostgreSQL id es UUID)
+        if (isUuid(cleanId)) {
+          const res = await supabase
+            .from('products')
+            .select('*')
+            .eq('id', cleanId)
+            .limit(1)
+            .maybeSingle();
+          if (res?.data) data = res.data;
+        }
+
+        // Si no es UUID o no se encontró por id, buscar por reference, sku, barcode o ean
+        if (!data) {
+          const alt = await supabase
+            .from('products')
+            .select('*')
+            .or(`reference.eq.${cleanId},sku.eq.${cleanId},barcode.eq.${cleanId},ean.eq.${cleanId}`)
+            .limit(1)
+            .maybeSingle();
+          if (alt?.data) data = alt.data;
+        }
+
+        return data;
+      })();
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error('Timeout al consultar producto directo en Supabase')),
+          timeoutMs
+        )
+      );
+
+      const data = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (data) {
         const specsList = Array.isArray(data.specs) ? data.specs : [];
@@ -717,7 +752,7 @@ export const storeService = {
         };
       }
     } catch (err) {
-      console.warn('[storeService.getProductById] Error consultando producto directo:', err);
+      console.warn('[storeService.getProductById] Error o timeout consultando producto directo:', err?.message || err);
     }
 
     return null;
@@ -1438,17 +1473,15 @@ export const storeService = {
     // Si no está en Supabase buscar en LocalStorage
     if (imageSources.length === 0) {
       try {
-        const local = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-        if (local) {
-          const found = JSON.parse(local).find((p) => String(p.id).trim() === strId);
-          if (found) {
-            imageSources = [
-              found.image,
-              found.image_url,
-              ...(Array.isArray(found.images) ? found.images : []),
-              ...(Array.isArray(found.additional_images) ? found.additional_images : []),
-            ].filter(Boolean);
-          }
+        const localList = this.getProductsFromStorage();
+        const found = localList.find((p) => p && String(p.id).trim() === strId);
+        if (found) {
+          imageSources = [
+            found.image,
+            found.image_url,
+            ...(Array.isArray(found.images) ? found.images : []),
+            ...(Array.isArray(found.additional_images) ? found.additional_images : []),
+          ].filter(Boolean);
         }
       } catch {}
     }
@@ -1484,24 +1517,22 @@ export const storeService = {
 
     // 5. Limpiar de LocalStorage
     try {
-      const local = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-      if (local) {
-        const remaining = JSON.parse(local).filter((p) => String(p.id).trim() !== strId);
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(remaining));
+      const localList = this.getProductsFromStorage();
+      const remaining = localList.filter((p) => p && String(p.id).trim() !== strId);
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(remaining));
 
-        // 6. Invalidar en tiempo real la caché global de la Serverless Function
-        try {
-          await fetch('/api/sync-store', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'delete',
-              deletedId: strId,
-              products: remaining,
-            }),
-          });
-        } catch {}
-      }
+      // 6. Invalidar en tiempo real la caché global de la Serverless Function
+      try {
+        await fetch('/api/sync-store', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'delete',
+            deletedId: strId,
+            products: remaining,
+          }),
+        });
+      } catch {}
     } catch (e) {
       console.error('[storeService] Error eliminando de localStorage:', e);
     }
@@ -1525,12 +1556,10 @@ export const storeService = {
 
     // También limpiar el localStorage de cualquier residuo
     try {
-      const local = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-      if (local) {
-        const purgedSet = new Set(purgedIds.map((i) => String(i).trim()));
-        const cleaned = JSON.parse(local).filter((p) => !purgedSet.has(String(p.id).trim()));
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(cleaned));
-      }
+      const localList = this.getProductsFromStorage();
+      const purgedSet = new Set(purgedIds.map((i) => String(i).trim()));
+      const cleaned = localList.filter((p) => p && !purgedSet.has(String(p.id).trim()));
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(cleaned));
     } catch {}
 
     console.info(`[storeService] Orphan sweep: ${swept} registros fantasma purgados de Supabase.`);
@@ -1589,21 +1618,19 @@ export const storeService = {
 
     // 5. Limpiar de LocalStorage y Serverless
     try {
-      const local = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-      if (local) {
-        const remaining = JSON.parse(local).filter((p) => !idSet.has(String(p.id).trim()));
-        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(remaining));
+      const localList = this.getProductsFromStorage();
+      const remaining = localList.filter((p) => p && !idSet.has(String(p.id).trim()));
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(remaining));
 
-        await fetch('/api/sync-store', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'delete',
-            deletedIds: idsArray,
-            products: remaining,
-          }),
-        });
-      }
+      await fetch('/api/sync-store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete',
+          deletedIds: idsArray,
+          products: remaining,
+        }),
+      });
     } catch {}
 
     return { success: !batchErr, count: idsArray.length, error: batchErr };

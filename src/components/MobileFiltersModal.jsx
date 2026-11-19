@@ -78,19 +78,23 @@ export const MobileFiltersModal = ({
               Explorar por Categoría
             </span>
             <div className="grid grid-cols-1 gap-2">
-              {categories.map((cat) => {
+              {(Array.isArray(categories) ? categories : []).map((cat) => {
+                if (!cat) return null;
                 const IconComponent = ICON_MAP[cat.icon] || Sparkles;
-                const isSelected = activeCategory === cat.id;
+                const catIdStr = String(cat.id || '').trim();
+                const isSelected = String(activeCategory || '').toLowerCase() === catIdStr.toLowerCase();
                 const count =
-                  cat.id === 'all'
-                    ? products.length
-                    : products.filter((p) => p.category === cat.id).length;
+                  catIdStr === 'all'
+                    ? (Array.isArray(products) ? products : []).length
+                    : (Array.isArray(products) ? products : []).filter(
+                        (p) => p && String(p.category || '').toLowerCase() === catIdStr.toLowerCase()
+                      ).length;
 
                 return (
                   <button
-                    key={cat.id}
+                    key={cat.id || catIdStr}
                     onClick={() => {
-                      onSelectCategory(cat.id);
+                      onSelectCategory(cat.id || catIdStr);
                       onClose();
                     }}
                     className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all text-left ${

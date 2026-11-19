@@ -11,18 +11,40 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": ".*(facebookexternalhit|facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|SkypeUriPreview|meta-externalagent|Discordbot|Pinterest).*"
+          "value": ".*(facebookexternalhit|facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|SkypeUriPreview|meta-externalagent|Discordbot|Pinterest|Googlebot|bingbot).*"
         }
       ],
       "destination": "/api/product-share?product_id=:product_id"
     },
     {
       "source": "/p/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|SkypeUriPreview|meta-externalagent|Discordbot|Pinterest|Googlebot|bingbot).*"
+        }
+      ],
       "destination": "/api/product-share?id=:id"
     },
     {
       "source": "/producto/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|facebot|WhatsApp|Twitterbot|TelegramBot|LinkedInBot|Slackbot|SkypeUriPreview|meta-externalagent|Discordbot|Pinterest|Googlebot|bingbot).*"
+        }
+      ],
       "destination": "/api/product-share?id=:id"
+    },
+    {
+      "source": "/p/:id",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/producto/:id",
+      "destination": "/index.html"
     }
   ]
 }
