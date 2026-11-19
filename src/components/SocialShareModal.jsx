@@ -816,7 +816,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
       handleShareCard('footer-prep', {
         channel: 'whatsapp',
         format: 'story',
-        text: whatsappView === 'status' ? activeText : statusText,
+        text: statusText,
       });
       return;
     }
@@ -1561,7 +1561,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
                       onClick={() =>
                         handleNativeShare('wa-native-share', {
                           format: whatsappView === 'status' ? 'story' : 'square',
-                          text: activeText,
+                          text: whatsappView === 'status' ? statusText : activeText,
                         })
                       }
                       disabled={busyKey === 'wa-native-share'}
@@ -1677,7 +1677,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
                         handleShareCard('wa-share', {
                           channel: 'whatsapp',
                           format: 'story',
-                          text: whatsappView === 'status' ? activeText : statusText,
+                          text: statusText,
                         })
                       }
                       disabled={busyKey === 'wa-share'}
@@ -2139,7 +2139,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
                         onClick={() =>
                           handleNativeShare('guest-native-share', {
                             format: 'square',
-                            text: activeText,
+                            text: statusText,
                           })
                         }
                         disabled={busyKey === 'guest-native-share'}

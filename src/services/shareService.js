@@ -6,13 +6,18 @@ import { formatCurrency } from './storeService';
  * el mismo precio, descripción y enlace canónico del producto.
  */
 
-const FALLBACK_ORIGIN = 'https://mercado-tecnologico.vercel.app';
+const FALLBACK_ORIGIN = 'https://javrelstore.vercel.app';
 export const TIKTOK_UPLOAD_URL = 'https://www.tiktok.com/upload?lang=es';
 export const MESSENGER_HOME_URL = 'https://www.messenger.com/';
 
 export const getShareOrigin = () => {
   if (typeof window === 'undefined') return FALLBACK_ORIGIN;
-  return window.location.origin || FALLBACK_ORIGIN;
+  const origin = window.location.origin;
+  if (!origin || origin === 'null') return FALLBACK_ORIGIN;
+  if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+    return origin;
+  }
+  return origin.replace(/^http:\/\//i, 'https://');
 };
 
 /**
@@ -134,24 +139,42 @@ const buildMinimalCopy = (
 export const buildWhatsAppShareText = (product) =>
   buildMinimalCopy(product, { bold: true, cta: 'Ver ficha completa y comprar' });
 
-export const buildWhatsAppStatusText = (product) =>
-  buildMinimalCopy(product, { bold: true, cta: 'Ver ficha completa' });
+/**
+ * Copy comercial ultra compacto para Estados de WhatsApp y Web Share con imagen:
+ * WhatsApp recorta captions largos sobre imágenes superpuestas.
+ * Se garantiza límite estricto de caracteres con la URL en línea aislada (Línea 4)
+ * sin viñetas previas para que nunca se trunque con "..." y mantenga hipervínculo activo.
+ */
+export const buildWhatsAppStatusText = (product) => {
+  const { offer } = getPriceInfo(product);
+  const rawName = getProductName(product);
+  const name = rawName.length > 55 ? `${rawName.slice(0, 52).trim()}...` : rawName;
+  const price = formatCurrency(offer);
+  const url = buildProductShareUrl(product);
+
+  return [
+    `🔥 *${name}* — *${price}*`,
+    '',
+    '👉 Cómpralo aquí:',
+    url,
+  ].join('\n');
+};
 
 export const buildFacebookShareText = (product) =>
   buildMinimalCopy(product, { cta: 'Ver ficha completa' });
 
 export const buildFacebookStoryText = (product) => {
-  const { offer, hasRegular, discount } = getPriceInfo(product);
+  const { offer } = getPriceInfo(product);
+  const rawName = getProductName(product);
+  const name = rawName.length > 55 ? `${rawName.slice(0, 52).trim()}...` : rawName;
   const price = formatCurrency(offer);
-  const priceLine = hasRegular ? `🔥 ${price} · ${discount}% OFF` : `🔥 ${price}`;
+  const url = buildProductShareUrl(product);
 
   return [
-    `🚀 ${getProductName(product)}`,
+    `🔥 *${name}* — *${price}*`,
     '',
-    priceLine,
-    '',
-    '👉 Ver ficha completa',
-    buildProductShareUrl(product),
+    '👉 Cómpralo aquí:',
+    url,
   ].join('\n');
 };
 
