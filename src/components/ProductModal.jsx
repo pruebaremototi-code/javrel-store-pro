@@ -63,6 +63,15 @@ export const ProductModal = ({
   const [shippingVal, setShippingVal] = useState('');
   const [applyGlobally, setApplyGlobally] = useState(false);
 
+  // Estados para edición CRUD de características/specs (deben estar ANTES del early return)
+  const [editingSpecIdx, setEditingSpecIdx] = useState(null);
+  const [specTitleDraft, setSpecTitleDraft] = useState('');
+  const [specDetailDraft, setSpecDetailDraft] = useState('');
+  const [isAddingSpec, setIsAddingSpec] = useState(false);
+  const [newSpecTitle, setNewSpecTitle] = useState('');
+  const [newSpecDetail, setNewSpecDetail] = useState('');
+  const [isSavingSpecs, setIsSavingSpecs] = useState(false);
+
   // Generar o normalizar array de imágenes para la galería
   // REGLA: El primer espacio corresponde siempre a la Imagen Principal
   // y las miniaturas secundarias no se duplican artificialmente.
@@ -110,25 +119,146 @@ export const ProductModal = ({
   const cleanRef = formatDisplayReference(product.reference, product.name, product.category, product.id);
   const cleanEan = formatCleanEan(product.ean || product.barcode, product.id || cleanRef);
 
+  // Formatear especificación técnica de forma segura e infalible (evitando [object Object])
+  const formatSpecItem = (spec) => {
+    if (!spec) return null;
+    if (typeof spec === 'string') {
+      const clean = spec.replace(/\[object Object\]/g, '').trim();
+      if (!clean) return null;
+      const colonIndex = clean.indexOf(':');
+      if (colonIndex !== -1) {
+        return {
+          title: clean.slice(0, colonIndex).trim().toUpperCase(),
+          detail: clean.slice(colonIndex + 1).trim(),
+        };
+      }
+      const words = clean.split(' ');
+      if (words.length > 2) {
+        return {
+          title: words.slice(0, 2).join(' ').toUpperCase(),
+          detail: words.slice(2).join(' '),
+        };
+      }
+      return { title: 'CARACTERÍSTICA', detail: clean };
+    }
+    if (typeof spec === 'object' && spec !== null) {
+      const rawTitle = spec.title || spec.key || spec.name || 'CARACTERÍSTICA';
+      const rawDetail = spec.detail !== undefined ? spec.detail : spec.value !== undefined ? spec.value : spec.val;
+      const detailStr = String(rawDetail ?? '').replace(/\[object Object\]/g, '').trim();
+      if (!detailStr || detailStr === '[object Object]') return null;
+      return {
+        title: String(rawTitle).trim().toUpperCase(),
+        detail: detailStr,
+      };
+    }
+    return null;
+  };
+
+  // Claves de metadata interna que NO deben mostrarse como specs públicas
+  const INTERNAL_SPEC_KEYS = /^(CONDICI[OÓ]N|ETIQUETA|SKU|EAN|BARCODE|COSTO|REFERENCIA|C[OÓ]DIGO)$/i;
+
   // Formatear especificaciones técnicas al estilo corporativo (**TÍTULO:** Detalle)
-  const formattedSpecs = (product.specs || []).map((spec) => {
-    if (typeof spec !== 'string') return { title: 'CARACTERÍSTICA', detail: String(spec) };
-    const colonIndex = spec.indexOf(':');
-    if (colonIndex !== -1) {
-      return {
-        title: spec.slice(0, colonIndex).trim().toUpperCase(),
-        detail: spec.slice(colonIndex + 1).trim(),
-      };
+  const formattedSpecs = (Array.isArray(product.specs) ? product.specs : [])
+    .map((spec) => formatSpecItem(spec))
+    .filter(
+      (item) =>
+        item &&
+        item.detail &&
+        !/\[object Object\]/i.test(item.detail) &&
+        !INTERNAL_SPEC_KEYS.test(item.title)
+    );
+
+  const handleStartEditSpec = (idx, currentItem) => {
+    setEditingSpecIdx(idx);
+    setSpecTitleDraft(currentItem.title || '');
+    setSpecDetailDraft(currentItem.detail || '');
+  };
+
+  const handleSaveEditSpec = async (idx) => {
+    if (!specDetailDraft.trim()) return;
+    setIsSavingSpecs(true);
+    const title = specTitleDraft.trim() || 'CARACTERÍSTICA';
+    const detail = specDetailDraft.trim();
+    const updatedString = `${title}: ${detail}`;
+
+    const currentList = Array.isArray(product.specs) ? [...product.specs] : [];
+    if (idx >= 0 && idx < currentList.length) {
+      currentList[idx] = updatedString;
+    } else {
+      currentList.push(updatedString);
     }
-    const words = spec.split(' ');
-    if (words.length > 2) {
-      return {
-        title: words.slice(0, 2).join(' ').toUpperCase(),
-        detail: words.slice(2).join(' '),
-      };
+
+    if (onUpdateProductField) {
+      onUpdateProductField('specs', currentList);
     }
-    return { title: 'ESPECIFICACIÓN', detail: spec };
-  });
+
+    try {
+      await storeService.updateProductAtomic({
+        ...product,
+        specs: currentList,
+      });
+      if (onRefetchProducts) await onRefetchProducts();
+    } catch (err) {
+      console.warn('Error actualizando característica:', err);
+    } finally {
+      setIsSavingSpecs(false);
+      setEditingSpecIdx(null);
+    }
+  };
+
+  const handleDeleteSpec = async (idx) => {
+    if (!window.confirm('¿Deseas eliminar esta característica del producto?')) return;
+    setIsSavingSpecs(true);
+    const currentList = Array.isArray(product.specs) ? [...product.specs] : [];
+    currentList.splice(idx, 1);
+
+    if (onUpdateProductField) {
+      onUpdateProductField('specs', currentList);
+    }
+
+    try {
+      await storeService.updateProductAtomic({
+        ...product,
+        specs: currentList,
+      });
+      if (onRefetchProducts) await onRefetchProducts();
+    } catch (err) {
+      console.warn('Error eliminando característica:', err);
+    } finally {
+      setIsSavingSpecs(false);
+      setEditingSpecIdx(null);
+    }
+  };
+
+  const handleCreateNewSpec = async () => {
+    if (!newSpecDetail.trim()) return;
+    setIsSavingSpecs(true);
+    const title = newSpecTitle.trim() || 'CARACTERÍSTICA';
+    const detail = newSpecDetail.trim();
+    const newSpecEntry = `${title}: ${detail}`;
+
+    const currentList = Array.isArray(product.specs) ? [...product.specs] : [];
+    currentList.push(newSpecEntry);
+
+    if (onUpdateProductField) {
+      onUpdateProductField('specs', currentList);
+    }
+
+    try {
+      await storeService.updateProductAtomic({
+        ...product,
+        specs: currentList,
+      });
+      if (onRefetchProducts) await onRefetchProducts();
+      setNewSpecTitle('');
+      setNewSpecDetail('');
+      setIsAddingSpec(false);
+    } catch (err) {
+      console.warn('Error agregando característica:', err);
+    } finally {
+      setIsSavingSpecs(false);
+    }
+  };
 
   const handleWhatsAppBuy = () => {
     confetti({
@@ -221,26 +351,48 @@ export const ProductModal = ({
     }
   };
 
-  // Guardar Garantía in-situ
-  const handleSaveWarranty = () => {
+  // Guardar Garantía in-situ con persistencia atómica en Supabase
+  const handleSaveWarranty = async () => {
     const finalVal = warrantyVal.trim() || 'Garantía Oficial 12 Meses';
     if (onUpdateProductField) {
       onUpdateProductField('warrantyText', finalVal);
     }
-    if (applyGlobally && onUpdateConfig) {
-      onUpdateConfig({ ...config, warrantyText: finalVal });
+    try {
+      await storeService.updateProductAtomic({
+        ...product,
+        warrantyText: finalVal,
+      });
+      if (applyGlobally && onUpdateConfig) {
+        const newCfg = { ...config, warrantyText: finalVal };
+        onUpdateConfig(newCfg);
+        await storeService.saveConfig(newCfg);
+      }
+      if (onRefetchProducts) await onRefetchProducts();
+    } catch (err) {
+      console.warn('Error guardando garantía en Supabase:', err);
     }
     setIsEditingWarranty(false);
   };
 
-  // Guardar Envíos in-situ
-  const handleSaveShipping = () => {
+  // Guardar Envíos in-situ con persistencia atómica en Supabase
+  const handleSaveShipping = async () => {
     const finalVal = shippingVal.trim() || 'Envíos Asegurados a Colombia';
     if (onUpdateProductField) {
       onUpdateProductField('shippingText', finalVal);
     }
-    if (applyGlobally && onUpdateConfig) {
-      onUpdateConfig({ ...config, shippingText: finalVal });
+    try {
+      await storeService.updateProductAtomic({
+        ...product,
+        shippingText: finalVal,
+      });
+      if (applyGlobally && onUpdateConfig) {
+        const newCfg = { ...config, shippingText: finalVal };
+        onUpdateConfig(newCfg);
+        await storeService.saveConfig(newCfg);
+      }
+      if (onRefetchProducts) await onRefetchProducts();
+    } catch (err) {
+      console.warn('Error guardando envíos en Supabase:', err);
     }
     setIsEditingShipping(false);
   };
@@ -537,22 +689,156 @@ export const ProductModal = ({
                     </div>
                   </div>
 
-                  {/* FICHA TÉCNICA ESTRUCTURADA */}
-                  <div>
-                    {formattedSpecs.length > 0 && formattedSpecs.map((item, idx) => (
-                      <p key={idx} className="text-sm text-slate-700 leading-relaxed mb-2.5">
-                        <strong className="text-slate-900 uppercase font-bold tracking-wide">
-                          {item.title}:
-                        </strong>{' '}
-                        {item.detail}
+                  {/* FICHA TÉCNICA ESTRUCTURADA Y TOTALMENTE EDITABLE EN MODO ADMIN */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                      <span className="text-xs font-mono-code font-bold uppercase tracking-wider text-slate-500">
+                        Características y Especificaciones
+                      </span>
+                      {canEdit && !isAddingSpec && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingSpec(true);
+                            setNewSpecTitle('');
+                            setNewSpecDetail('');
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Añadir</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Formulario Inline para Añadir Nueva Característica */}
+                    {canEdit && isAddingSpec && (
+                      <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2 animate-fadeIn">
+                        <div className="font-bold text-xs text-blue-900">Nueva Característica:</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <input
+                            type="text"
+                            value={newSpecTitle}
+                            onChange={(e) => setNewSpecTitle(e.target.value)}
+                            placeholder="Título (ej: Procesador)"
+                            className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 font-semibold"
+                          />
+                          <input
+                            type="text"
+                            value={newSpecDetail}
+                            onChange={(e) => setNewSpecDetail(e.target.value)}
+                            placeholder="Detalle (ej: Intel Core i7 16GB)"
+                            className="sm:col-span-2 px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsAddingSpec(false)}
+                            className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCreateNewSpec}
+                            disabled={isSavingSpecs || !newSpecDetail.trim()}
+                            className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
+                          >
+                            {isSavingSpecs ? 'Guardando...' : 'Guardar Característica'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Lista de Especificaciones */}
+                    {formattedSpecs.length > 0 ? (
+                      <div className="space-y-2">
+                        {formattedSpecs.map((item, idx) => (
+                          <div key={idx} className="group flex items-start justify-between gap-2 p-1.5 rounded-lg hover:bg-slate-50 transition-colors">
+                            {editingSpecIdx === idx ? (
+                              <div className="w-full space-y-1.5 animate-fadeIn">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                  <input
+                                    type="text"
+                                    value={specTitleDraft}
+                                    onChange={(e) => setSpecTitleDraft(e.target.value)}
+                                    placeholder="Título"
+                                    className="px-2.5 py-1 text-xs bg-white border border-blue-400 rounded-lg font-bold outline-none"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={specDetailDraft}
+                                    onChange={(e) => setSpecDetailDraft(e.target.value)}
+                                    placeholder="Detalle"
+                                    className="sm:col-span-2 px-2.5 py-1 text-xs bg-white border border-blue-400 rounded-lg outline-none"
+                                    autoFocus
+                                  />
+                                </div>
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingSpecIdx(null)}
+                                    className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300"
+                                  >
+                                    ✕
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveEditSpec(idx)}
+                                    disabled={isSavingSpecs}
+                                    className="px-2.5 py-0.5 rounded bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-xs"
+                                  >
+                                    ✓ Guardar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-sm text-slate-700 leading-relaxed">
+                                  <strong className="text-slate-900 uppercase font-bold tracking-wide">
+                                    {item.title}:
+                                  </strong>{' '}
+                                  {item.detail}
+                                </p>
+                                {canEdit && (
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditSpec(idx, item)}
+                                      className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                      title="Editar esta característica"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteSpec(idx)}
+                                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                      title="Eliminar esta característica"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic py-1">
+                        No hay especificaciones adicionales registradas.
                       </p>
-                    ))}
+                    )}
 
                     {/* Descripción General */}
                     {product.description && (
-                      <p className="text-sm text-slate-600 leading-relaxed mt-3 pt-3 border-t border-slate-100">
-                        {product.description}
-                      </p>
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+                          {product.description}
+                        </p>
+                      </div>
                     )}
                   </div>
 

@@ -94,12 +94,43 @@ export const ProductCard = ({
     originalDisplayPrice && originalDisplayPrice > effectivePrice
   );
 
-  // Primer spec como highlight / etiqueta editable
-  const rawSpecHighlight =
-    product.specs && product.specs.length > 0 ? product.specs[0] : null;
-  const specHighlight = rawSpecHighlight
-    ? sanitizeCommercialText(String(rawSpecHighlight)) || null
-    : null;
+  // Función extractora que formatea cualquier spec a string legible, evitando [object Object]
+  const parseSpecText = (spec) => {
+    if (!spec) return '';
+    if (typeof spec === 'string') {
+      return spec.replace(/\[object Object\]/g, '').trim();
+    }
+    if (typeof spec === 'object' && spec !== null) {
+      const val = spec.value !== undefined ? spec.value : spec.detail !== undefined ? spec.detail : spec.val;
+      const key = spec.key || spec.title || spec.name;
+      if (val !== undefined && val !== null && String(val) !== '[object Object]') {
+        if (key && !/^(CONDICIÓN|CONDICION|ETIQUETA|SKU|EAN|BARCODE|COSTO)$/i.test(String(key))) {
+          return `${key}: ${val}`;
+        }
+        return String(val);
+      }
+      const entries = Object.entries(spec).filter(
+        ([k, v]) => v && String(v) !== '[object Object]' && typeof v !== 'object'
+      );
+      if (entries.length > 0) {
+        return entries.map(([k, v]) => `${k}: ${v}`).join(' - ');
+      }
+    }
+    return '';
+  };
+
+  // Primer spec descriptivo como highlight en la tarjeta (limpio de [object Object])
+  const specHighlight = React.useMemo(() => {
+    if (!Array.isArray(product.specs) || product.specs.length === 0) return null;
+    for (const s of product.specs) {
+      const parsed = parseSpecText(s);
+      if (parsed && !/\[object Object\]/i.test(parsed)) {
+        const sanitized = sanitizeCommercialText(parsed);
+        if (sanitized) return sanitized;
+      }
+    }
+    return null;
+  }, [product.specs]);
 
   // Texto comercial limpio: sin UUID, modelos de IA, dimensiones WebP ni
   // referencias internas que confundan al comprador.

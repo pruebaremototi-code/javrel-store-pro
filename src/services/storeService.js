@@ -133,17 +133,38 @@ const buildProductPayload = (
     payload.brand = cleanBrand(product.brand, '') || null;
     payload.badge = product.commercialTag || product.badge || '';
 
-    // Preservar condición física y etiquetas comerciales dentro de specs (JSONB)
-    // para garantizar persistencia fiel sin provocar error 42703 por columnas no nativas.
+    // Preservar condición física, SKU, EAN, costo y etiquetas dentro de specs (JSONB)
+    // para garantizar persistencia fiel e indestructible en Supabase.
     let specs = Array.isArray(product.specs) ? [...product.specs] : [];
-    const conditionVal = product.condition || 'Nuevo';
-    if (!specs.some((s) => typeof s === 'object' && s?.key === 'CONDICIÓN')) {
-      specs.push({ key: 'CONDICIÓN', value: conditionVal });
+
+    const setSpecKey = (keyName, val) => {
+      if (!val) return;
+      const strVal = String(val).trim();
+      if (!strVal || strVal === '[object Object]') return;
+      const idx = specs.findIndex(
+        (s) => typeof s === 'object' && s !== null && (s.key === keyName || s.title === keyName)
+      );
+      if (idx >= 0) {
+        specs[idx] = { key: keyName, value: strVal };
+      } else {
+        specs.push({ key: keyName, value: strVal });
+      }
+    };
+
+    setSpecKey('CONDICIÓN', product.condition || 'Nuevo');
+    if (product.commercialTag || product.badge) {
+      setSpecKey('ETIQUETA', product.commercialTag || product.badge);
     }
-    const commTag = product.commercialTag || product.badge;
-    if (commTag && !specs.some((s) => typeof s === 'object' && s?.key === 'ETIQUETA')) {
-      specs.push({ key: 'ETIQUETA', value: commTag });
+    if (product.sku || product.reference) {
+      setSpecKey('SKU', product.sku || product.reference);
     }
+    if (product.ean || product.barcode) {
+      setSpecKey('EAN', product.ean || product.barcode);
+    }
+    if (product.cost !== undefined && product.cost !== null && product.cost !== '') {
+      setSpecKey('COSTO', product.cost);
+    }
+
     payload.specs = specs;
     payload.rating = product.rating !== undefined ? Number(product.rating) : 5.0;
     payload.reviews = product.reviews !== undefined ? Number(product.reviews) : 0;
@@ -715,12 +736,23 @@ export const storeService = {
         ...secondaryImages.filter((img) => img !== mainImage),
       ];
 
+      const specsList = Array.isArray(item.specs) ? item.specs : [];
+      const findSpecVal = (keyName) => {
+        const found = specsList.find(
+          (s) => typeof s === 'object' && s !== null && (s.key === keyName || s.title === keyName)
+        );
+        return found?.value || found?.detail || null;
+      };
+
       const rawCondition =
         item.condition ||
-        (Array.isArray(item.specs) &&
-          item.specs.find((s) => s && s.key === 'CONDICIÓN')?.value) ||
+        findSpecVal('CONDICIÓN') ||
+        findSpecVal('CONDICION') ||
         'Nuevo';
-      const commercialTag = item.commercial_tag || item.badge || '';
+      const commercialTag = item.commercial_tag || item.badge || findSpecVal('ETIQUETA') || '';
+      const skuVal = item.sku || item.reference || findSpecVal('SKU') || findSpecVal('REFERENCIA') || '';
+      const barcodeVal = item.barcode || item.ean || findSpecVal('EAN') || findSpecVal('BARCODE') || '';
+      const costVal = item.cost !== undefined && item.cost !== null ? item.cost : findSpecVal('COSTO');
 
       return {
         id: item.id,
@@ -736,6 +768,7 @@ export const storeService = {
           item.original_price !== null && item.original_price !== undefined
             ? Number(item.original_price)
             : null,
+        cost: costVal !== null && costVal !== undefined && !isNaN(Number(costVal)) ? Number(costVal) : null,
         image: mainImage,
         images: allImages,
         additional_images: secondaryImages,
@@ -745,8 +778,11 @@ export const storeService = {
         stock: Number(item.stock ?? 10),
         featured: Boolean(item.featured ?? item.is_featured),
         description: sanitizeCommercialText(item.description || ''),
-        specs: Array.isArray(item.specs) ? item.specs : [],
-        reference: item.reference || item.sku || '',
+        specs: specsList,
+        reference: skuVal,
+        sku: skuVal,
+        barcode: barcodeVal,
+        ean: barcodeVal,
       };
     };
 

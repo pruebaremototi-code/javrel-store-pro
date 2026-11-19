@@ -5,11 +5,11 @@ import { PERMISSIONS } from '../config/rbac';
 /**
  * Texto editable in-situ (estilo Wix / Elementor).
  *
- * Reglas clave:
- * - Solo es editable si el administrador tiene activo el "Modo Editor".
- * - El clic sobre el texto NUNCA debe burbujear a la tarjeta ni abrir el modal de detalle.
- * - No se renderiza ningún badge dentro del nodo contentEditable: así el texto
- *   leído al hacer blur no se contamina con iconos o etiquetas auxiliares.
+ * Arquitectura Anti-Salto de Cursor:
+ * - Cuando el elemento está enfocado en edición, React NO toca los nodos hijos
+ *   del nodo DOM `contentEditable`. El navegador gestiona el caret de forma nativa.
+ * - `textRef` captura cada cambio en `onInput` sin forzar re-renders que destruyan la selección.
+ * - El valor se consolida en `onBlur` o cuando se activa el guardado general.
  */
 export const EditableText = ({
   id,
@@ -19,7 +19,6 @@ export const EditableText = ({
   className = '',
   multiline = false,
   placeholder = 'Haz clic para editar texto...',
-  // Props de compatibilidad con la versión anterior (edición por campo de producto)
   value,
   onChange,
   isAdmin: legacyIsAdmin,
@@ -28,35 +27,36 @@ export const EditableText = ({
   const { isEditorModeActive, getText, updateText, isAdmin, hasPermission } = useVisualEditor();
   const Tag = as || Component;
 
-  // Determinar si opera por ID de Contexto o por props controladas legacy
   const isContextDriven = Boolean(id);
   const activeAdmin = isAdmin ?? legacyIsAdmin;
   const canEdit = Boolean(
     activeAdmin && isEditorModeActive && hasPermission?.(PERMISSIONS.EDIT_PAGE)
   );
 
-  // Valor actual
   const resolvedValue = isContextDriven ? getText(id, initialText) : value ?? initialText;
-  const [currentText, setCurrentText] = useState(resolvedValue || '');
   const [isFocused, setIsFocused] = useState(false);
   const elementRef = useRef(null);
+  const isFocusedRef = useRef(false);
+  const textRef = useRef(resolvedValue || '');
 
-  // Sincronizar cambios externos solo cuando el usuario no está escribiendo.
-  // Evita que un re-render de la tarjeta mueva el cursor mientras se edita.
+  // Sincronizar el DOM solo cuando el usuario NO está editando activamente
   useEffect(() => {
-    if (!isFocused) {
-      setCurrentText(resolvedValue || '');
+    textRef.current = resolvedValue || '';
+    if (!isFocusedRef.current && elementRef.current) {
+      if (elementRef.current.innerText !== (resolvedValue || '')) {
+        elementRef.current.innerText = resolvedValue || '';
+      }
     }
-  }, [resolvedValue, isFocused]);
+  }, [resolvedValue]);
 
-  // Si el modo editor está apagado (o no es admin), renderizar elemento plano.
+  // Si el modo editor está inactivo o no tiene permisos, renderizar elemento estático
   if (!canEdit) {
     return <Tag className={className}>{resolvedValue || initialText}</Tag>;
   }
 
   const commitText = (rawText) => {
     const newText = String(rawText || '').replace(/\u200B/g, '').trim();
-    setCurrentText(newText);
+    textRef.current = newText;
 
     if (newText !== resolvedValue) {
       if (isContextDriven) {
@@ -68,28 +68,38 @@ export const EditableText = ({
     }
   };
 
-  // Manejo de edición directa en pantalla (ContentEditable)
+  const handleFocus = () => {
+    isFocusedRef.current = true;
+    setIsFocused(true);
+  };
+
   const handleBlur = (e) => {
+    isFocusedRef.current = false;
     setIsFocused(false);
     commitText(e.currentTarget.innerText);
   };
 
+  const handleInput = (e) => {
+    textRef.current = e.currentTarget.innerText;
+  };
+
   const handleKeyDown = (e) => {
-    // Evita que atajos globales de la tarjeta reaccionen mientras se escribe.
     e.stopPropagation();
 
     if (!multiline && e.key === 'Enter') {
       e.preventDefault();
+      commitText(e.currentTarget.innerText);
       e.currentTarget.blur();
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      e.currentTarget.innerText = resolvedValue;
-      setCurrentText(resolvedValue || '');
+      if (elementRef.current) {
+        elementRef.current.innerText = resolvedValue || '';
+      }
+      textRef.current = resolvedValue || '';
       e.currentTarget.blur();
     }
   };
 
-  // Pegar siempre como texto plano: evita HTML/estilos externos dentro de la tarjeta.
   const handlePaste = (e) => {
     e.preventDefault();
     const plainText = e.clipboardData?.getData('text/plain') || '';
@@ -98,24 +108,31 @@ export const EditableText = ({
     selection.deleteFromDocument();
     selection.getRangeAt(0).insertNode(document.createTextNode(plainText));
     selection.collapseToEnd();
+    if (elementRef.current) {
+      textRef.current = elementRef.current.innerText;
+    }
   };
 
-  // El texto y sus controles absorben el clic: la tarjeta jamás debe abrir el modal.
   const stopCardInteraction = (e) => {
     e.stopPropagation();
   };
 
   return (
     <Tag
-      ref={elementRef}
+      ref={(el) => {
+        elementRef.current = el;
+        if (el && !isFocusedRef.current && el.innerText !== (resolvedValue || '')) {
+          el.innerText = resolvedValue || '';
+        }
+      }}
       contentEditable={true}
       suppressContentEditableWarning={true}
       spellCheck={false}
       data-inline-editable="true"
       data-editor-field={id || field || undefined}
       aria-label={`Editar ${id || field || 'texto'}`}
-      onFocus={() => setIsFocused(true)}
-      onInput={(e) => commitText(e.currentTarget.innerText)}
+      onFocus={handleFocus}
+      onInput={handleInput}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
@@ -130,9 +147,7 @@ export const EditableText = ({
           ? 'outline-dashed outline-2 outline-[#0A6CFF] outline-offset-2 bg-blue-50/20 rounded shadow-xs'
           : 'hover:outline-dashed hover:outline-2 hover:outline-[#0A6CFF]/80 hover:outline-offset-2 hover:bg-blue-50/10 rounded'
       } ${className}`}
-      title={`Modo Editor Wix: Haz clic para editar (${id || 'texto'})`}
-    >
-      {currentText ? currentText : null}
-    </Tag>
+      title={`Modo Editor Wix: Haz clic para editar (${id || field || 'texto'})`}
+    />
   );
 };
