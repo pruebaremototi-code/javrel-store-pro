@@ -1195,18 +1195,25 @@ const wrapText = (ctx, text, maxWidth, maxLines) => {
   return lines;
 };
 
+/**
+ * Dibuja una imagen emulando CSS object-fit: contain (escala proporcional completa sin recortes).
+ * Garantiza que el 100% de la imagen original quepa íntegra dentro del área asignada sin amputar
+ * ningún borde (superior, inferior o lateral), conservando su relación de aspecto original.
+ */
 const drawImageContain = (ctx, image, x, y, width, height) => {
   if (!image || !image.width || !image.height) return;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
   const scale = Math.min(width / image.width, height / image.height);
-  const drawWidth = image.width * scale;
-  const drawHeight = image.height * scale;
-  ctx.drawImage(
-    image,
-    x + (width - drawWidth) / 2,
-    y + (height - drawHeight) / 2,
-    drawWidth,
-    drawHeight
-  );
+  const drawWidth = Math.round(image.width * scale);
+  const drawHeight = Math.round(image.height * scale);
+  const drawX = Math.round(x + (width - drawWidth) / 2);
+  const drawY = Math.round(y + (height - drawHeight) / 2);
+
+  ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  ctx.restore();
 };
 
 const drawBackground = (ctx, width, height, palette) => {
@@ -2111,13 +2118,13 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   roundRect(ctx, pad, pad, cardW, cardH, radius);
   ctx.clip();
 
-  // ── 1. IMAGEN SUPERIOR PROTAGÓNICA FULL-BLEED (65% - 70% del Área Visual - Cero Espacios Blancos) ──
+  // ── 1. IMAGEN SUPERIOR PROTAGÓNICA (65% - 70% del Área Visual - object-contain sin recortes) ──
   const imgBoxH = 1270;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(pad, pad, cardW, imgBoxH);
 
   if (image && image.width && image.height) {
-    drawImageCover(ctx, image, pad, pad, cardW, imgBoxH);
+    drawImageContain(ctx, image, pad, pad, cardW, imgBoxH);
   }
 
   // Divisor inferior de la imagen
