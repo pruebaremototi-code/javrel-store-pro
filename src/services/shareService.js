@@ -151,18 +151,31 @@ export const buildWhatsAppShareText = (product) =>
  * sin viñetas previas para que nunca se trunque con "..." y mantenga hipervínculo activo.
  */
 export const buildWhatsAppStatusText = (product) => {
-  const { offer } = getPriceInfo(product);
+  const { offer, hasRegular, discount } = getPriceInfo(product);
   const rawName = getProductName(product);
   const name = rawName.length > 55 ? `${rawName.slice(0, 52).trim()}...` : rawName;
   const price = formatCurrency(offer);
   const url = buildProductShareUrl(product);
 
-  return [
-    `🔥 *${name}* — *${price}*`,
-    '',
-    '👉 Cómpralo aquí:',
-    url,
-  ].join('\n');
+  const lines = [
+    `🔥 *${name}*`,
+    hasRegular ? `💰 *Precio: ${price}* · ${discount}% OFF` : `💰 *Precio: ${price}*`,
+  ];
+
+  // Característica destacada o descripción breve (1 o 2 líneas)
+  const spec = Array.isArray(product?.specs) && product.specs.length > 0
+    ? (typeof product.specs[0] === 'string' ? product.specs[0] : product.specs[0]?.value || product.specs[0]?.title || '')
+    : product?.description ? String(product.description).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 85) : '';
+
+  if (spec && !/\[object Object\]/i.test(spec)) {
+    lines.push(`✨ ${spec}`);
+  }
+
+  lines.push('');
+  lines.push('👉 Cómpralo en JavrelStore:');
+  lines.push(url);
+
+  return lines.join('\n');
 };
 
 export const buildFacebookShareText = (product) =>
@@ -244,7 +257,7 @@ export const buildTelegramShareUrl = (url, text) =>
   `https://t.me/share/url?url=${encodeURIComponent(url || '')}&text=${encodeURIComponent(text || '')}`;
 
 export const buildMessengerShareUrl = (url) =>
-  `fb-messenger://share/?link=${encodeURIComponent(url || '')}`;
+  `https://www.facebook.com/dialog/send?link=${encodeURIComponent(url || '')}&app_id=291494419107518&redirect_uri=${encodeURIComponent(url || '')}`;
 
 /**
  * Detección de dispositivo móvil (Android, iPhone, iPad, etc.)

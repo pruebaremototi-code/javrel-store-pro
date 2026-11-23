@@ -627,7 +627,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
       openUrl:
         options.openUrl ||
         (channel === 'whatsapp'
-          ? 'https://web.whatsapp.com/'
+          ? buildWhatsAppChatUrl(options.text || activeText)
           : channel === 'facebook'
             ? 'https://www.facebook.com/'
             : TIKTOK_UPLOAD_URL),
@@ -687,14 +687,38 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
   const handleDirectWhatsAppShare = async (key = 'direct-wa') => {
     try {
       setBusyKey(key);
-      const waUrl = buildWhatsAppChatUrl(activeText);
+      const textToShare = activeText || whatsappText;
+
+      // 1) En dispositivos móviles con Web Share API (Android / iOS):
+      // Enviamos el paquete completo: Imagen Ultra HD 9:16 + Texto con descripción y enlace oficial
+      if (isMobile && canShare) {
+        try {
+          const blob = await generateCardBlob({ format: 'story' });
+          const fileName = buildPromoFileName(product, 'story');
+          await shareNativePromoCard({
+            blob,
+            fileName,
+            title: `${productName} · ${config?.storeName || 'JavrelStore'}`,
+            text: textToShare,
+            url: productUrl,
+          });
+          notify(key, 'Tarjeta y mensaje enviados a WhatsApp.');
+          return;
+        } catch (nativeErr) {
+          if (nativeErr?.name === 'AbortError') return;
+          console.warn('[handleDirectWhatsAppShare] Fallback a enlace universal:', nativeErr);
+        }
+      }
+
+      // 2) Fallback universal web inmediato (cero bloqueos ni protocolos obsoletos)
+      const waUrl = buildWhatsAppChatUrl(textToShare);
       try {
-        await writeTextToClipboard(activeText);
+        await writeTextToClipboard(textToShare);
       } catch {}
       openWindow(waUrl);
       notify(key, 'WhatsApp abierto con mensaje oficial y enlace del producto.');
     } catch {
-      openWindow(buildWhatsAppChatUrl(activeText));
+      openWindow(buildWhatsAppChatUrl(activeText || whatsappText));
     } finally {
       setBusyKey('');
     }
@@ -817,9 +841,9 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
     instagram: 'https://www.instagram.com/',
     facebook: 'https://www.facebook.com/stories/create/',
     tiktok: TIKTOK_UPLOAD_URL,
-    whatsapp: isMobile ? 'whatsapp://' : 'https://web.whatsapp.com/',
-    telegram: isMobile ? 'https://t.me/' : 'https://web.telegram.org/',
-    twitter: null,
+    whatsapp: buildWhatsAppChatUrl(statusText),
+    telegram: buildTelegramShareUrl(productUrl, statusText),
+    twitter: buildTwitterShareUrl(statusText, productUrl),
   };
 
   const handleShareStory = async (channelKey = 'instagram') => {
@@ -2186,18 +2210,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
                       </button>
                     </div>
 
-                    {/* Previsualización del mensaje comercial para visitantes (solo lectura) */}
-                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-1.5">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        <span>Mensaje comercial oficial</span>
-                        <span className="text-[#0A6CFF] font-mono-code">Enlace /p/:id incluido</span>
-                      </div>
-                      <pre className="font-sans text-xs text-slate-700 whitespace-pre-wrap break-words leading-relaxed max-h-36 overflow-y-auto pr-1 [scrollbar-width:thin] select-all">
-                        {statusText}
-                      </pre>
-                    </div>
-
-                    {/* Copiar para Estado/WhatsApp (copy estructurado con URL cliqueable) */}
+                    {/* Copiar para Estado/WhatsApp (copy estructurado con URL cliqueable en memoria) */}
                     <button
                       type="button"
                       onClick={() => copyText(statusText, 'guest-link', '¡Texto + enlace copiados! Pégalo en tu estado o chat.')}

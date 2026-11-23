@@ -748,9 +748,9 @@ export const AdPreviewCard = ({
       ) : (
         /* Disposición Vertical (Square 1:1, Story 9:16 y Portrait 4:5) — Réplica Fiel de la Tarjeta del Catálogo */
         <div className="relative h-full flex flex-col justify-between">
-          {/* 1. Imagen Protagonista Superior Full-Bleed sin marcos ni márgenes excesivos */}
+          {/* 1. Imagen Protagonista Superior Full-Bleed sin marcos ni márgenes excesivos (65%-70%) */}
           <div className={`relative w-full overflow-hidden bg-white border-b border-slate-100 flex items-center justify-center ${
-            format === 'story' ? 'h-[60%] min-h-[320px]' : format === 'portrait' ? 'h-[54%] min-h-[240px]' : 'aspect-square h-[54%]'
+            format === 'story' ? 'h-[66%] min-h-[340px]' : format === 'portrait' ? 'h-[54%] min-h-[240px]' : 'aspect-square h-[54%]'
           }`}>
             <img
               src={imageUrl || '/zafra/logo-menu.webp'}

@@ -2092,9 +2092,9 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   roundRect(ctx, pad, pad, cardW, cardH, radius);
   ctx.clip();
 
-  // ── 1. IMAGEN SUPERIOR PROTAGÓNICA (58% - 62% del alto total 1920px) ─────
-  // imgBoxH = 1140px (~59.4% del canvas total de 1920px), eliminando espacios vacíos
-  const imgBoxH = 1140;
+  // ── 1. IMAGEN SUPERIOR PROTAGÓNICA (65% - 70% del Área Visual) ──────────
+  // imgBoxH = 1270px (~66.15% del canvas de 1920px), máxima prioridad a la fotografía
+  const imgBoxH = 1270;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(pad, pad, cardW, imgBoxH);
 
@@ -2102,8 +2102,8 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    // Padding mínimo (24px) para que la fotografía llene generosamente el contenedor
-    const imgPad = 24;
+    // Margen ultra limpio (16px) para que el producto sea el protagonista sin marcos vacíos
+    const imgPad = 16;
     const scale = Math.min(
       (cardW - imgPad * 2) / image.width,
       (imgBoxH - imgPad * 2) / image.height
@@ -2154,13 +2154,14 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
     ctx.restore();
   }
 
-  // ── 2. FILA MARCA + CALIFICACIÓN (por debajo de la imagen) ─────────────────
-  const contentPad = pad + 48;
-  const contentW = cardW - 96;
-  const brandY = pad + imgBoxH + 46; // y = 1234
+  // ── 2. JERARQUÍA TEXTUAL INFERIOR (30% - 35%): Espaciada y sin superposiciones
+  const contentPad = pad + 44;
+  const contentW = cardW - 88;
 
+  // Fila de Marca y Rating
+  const brandY = pad + imgBoxH + 36; // y ≈ 1354
   ctx.save();
-  ctx.font = `800 28px ${FONT_HEAD}`;
+  ctx.font = `800 24px ${FONT_HEAD}`;
   ctx.fillStyle = '#0A6CFF';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -2171,62 +2172,24 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   ctx.fillText(`★ ${data.rating || '5.0'}`, contentPad + contentW, brandY);
   ctx.restore();
 
-  // ── 3. TÍTULO DEL PRODUCTO (con wrapping limpio) ───────────────────────────
-  const titleY = brandY + 44; // y = 1278
+  // 1) Título del producto en tipografía gruesa y alto contraste
+  const titleY = brandY + 34; // y ≈ 1388
   drawWrappedText(
     ctx,
     data.productName,
     contentPad,
     titleY,
     contentW,
-    52,   // lineHeight
+    50,   // lineHeight
     2,    // maxLines
-    `800 44px ${FONT_HEAD}`,
+    `900 44px ${FONT_HEAD}`,
     isDark ? '#FFFFFF' : '#0F172A'
   );
 
-  // ── 4. DESCRIPCIÓN CORTA (2 líneas compactas) ─────────────────────────────
-  const descY = titleY + 88; // y = 1366
-  drawWrappedText(
-    ctx,
-    data.description || 'Dispositivo tecnológico diseñado para ofrecer el máximo rendimiento.',
-    contentPad,
-    descY,
-    contentW,
-    34,   // lineHeight
-    2,    // maxLines
-    `500 24px ${FONT_BODY}`,
-    isDark ? 'rgba(255,255,255,0.7)' : '#64748B'
-  );
-
-  // ── 5. SPEC HIGHLIGHT con wrapping (evita truncación horizontal) ──────────
-  const specY = descY + 74; // y = 1440
-  if (data.specHighlight) {
-    drawWrappedText(
-      ctx,
-      `✓ ${data.specHighlight}`,
-      contentPad,
-      specY,
-      contentW,
-      30,   // lineHeight
-      2,    // maxLines
-      `700 24px ${FONT_HEAD}`,
-      '#059669'
-    );
-  }
-
-  // ── 6. DIVISOR + PRECIOS ───────────────────────────────────────────────────
-  const priceDivY = specY + 48; // y = 1488
-  ctx.beginPath();
-  ctx.moveTo(contentPad, priceDivY);
-  ctx.lineTo(contentPad + contentW, priceDivY);
-  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#E2E8F0';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  const priceY = priceDivY + 54; // y = 1542
+  // 2) Precio actual destacado en gran tamaño (+ regular tachado si aplica)
+  const priceY = titleY + 100; // y ≈ 1488
   ctx.save();
-  ctx.font = `900 60px ${FONT_HEAD}`;
+  ctx.font = `900 62px ${FONT_HEAD}`;
   ctx.fillStyle = isDark ? '#FFFFFF' : '#0F172A';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -2250,25 +2213,39 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   }
   ctx.restore();
 
-  // ── 7. BOTÓN CTA VISUAL ("Comprar en Tienda" - Zona Segura Superior) ─────
-  const ctaY = priceY + 50; // y = 1592
+  // 3) Detalles clave / característica principal (1 o 2 líneas bien encuadradas con auto-wrap)
+  const specY = priceY + 58; // y ≈ 1546
+  const specText = data.specHighlight || data.description || 'Garantía Oficial Directa · Despacho Inmediato a Todo el País';
+  drawWrappedText(
+    ctx,
+    `✓ ${specText}`,
+    contentPad,
+    specY,
+    contentW,
+    30,   // lineHeight
+    2,    // maxLines
+    `700 24px ${FONT_HEAD}`,
+    '#059669'
+  );
+
+  // 4) Botón visual tipo CTA ("Ver en Tienda")
+  const ctaY = specY + 62; // y ≈ 1608
   const ctaBtnW = contentW;
-  const ctaBtnH = 68;
+  const ctaBtnH = 64;
   ctx.save();
   const ctaGrad = ctx.createLinearGradient(contentPad, ctaY, contentPad + ctaBtnW, ctaY);
   ctaGrad.addColorStop(0, '#0A6CFF');
   ctaGrad.addColorStop(1, '#0050CC');
   fillRoundRect(ctx, contentPad, ctaY, ctaBtnW, ctaBtnH, 18, ctaGrad);
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = `800 30px ${FONT_HEAD}`;
+  ctx.font = `800 28px ${FONT_HEAD}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('Comprar en Tienda →', contentPad + ctaBtnW / 2, ctaY + ctaBtnH / 2);
+  ctx.fillText('Ver en Tienda →', contentPad + ctaBtnW / 2, ctaY + ctaBtnH / 2);
   ctx.restore();
 
-  // ── 8. SELLO LIMPIO JAVRELSTORE (CERO URLs INTERNAS) ──────────────────────
-  // Posicionado con margen seguro (~1700px), por encima de controles de WhatsApp
-  const brandStripY = ctaY + ctaBtnH + 34; // y = 1694
+  // 5) Sello de marca limpio (JavrelStore, CERO URLs impresas)
+  const brandStripY = ctaY + ctaBtnH + 32; // y ≈ 1704
 
   ctx.beginPath();
   ctx.moveTo(contentPad, brandStripY - 14);
@@ -2282,7 +2259,8 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   ctx.fillStyle = '#0A6CFF';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('● JavrelStore Oficial', contentPad + contentW / 2, brandStripY + 16);
+  ctx.fillText('● JavrelStore', contentPad + contentW / 2, brandStripY + 16);
+  ctx.restore();
   ctx.restore();
 
   // ── FIN DEL CLIP ──────────────────────────────────────────────────────────
