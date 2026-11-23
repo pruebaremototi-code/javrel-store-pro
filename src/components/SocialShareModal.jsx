@@ -118,7 +118,7 @@ const FORMAT_ICONS = {
 
 const FORMAT_FRAME = {
   square:    'w-full max-w-[340px] aspect-square',
-  story:     'w-full max-w-[220px] aspect-[9/16]',
+  story:     'w-full max-w-[240px] sm:max-w-[260px] aspect-[9/16]',
   portrait:  'w-full max-w-[280px] aspect-[4/5]',
   panoramic: 'w-full max-w-[420px] aspect-[16/9]',
   landscape: 'w-full max-w-[420px] aspect-[1.91/1]',
@@ -209,7 +209,7 @@ export const SocialShareModal = ({
   const [facebookView, setFacebookView] = useState('post');
   const [tiktokHook, setTiktokHook] = useState(TIKTOK_HOOKS[0].id);
   const [previewMode, setPreviewMode] = useState('interactive');
-  const [format, setFormat] = useState('square');
+  const [format, setFormat] = useState('story');
   const [theme, setTheme] = useState('classic');
   const [showAllThemes, setShowAllThemes] = useState(false);
   const [glassEffect, setGlassEffect] = useState(true);
@@ -605,8 +605,11 @@ export const SocialShareModal = ({
   const handleDownloadCard = async (key = 'card', overrides = {}) => {
     try {
       setBusyKey(key);
-      const blob = await generateCardBlob(overrides);
-      downloadBlob(blob, buildPromoFileName(product, overrides.format || format));
+      const targetFormat = overrides.format || format;
+      const blob = (targetFormat === 'story' && pregeneratedStoryBlob && Object.keys(overrides).length === 0)
+        ? pregeneratedStoryBlob
+        : await generateCardBlob({ ...overrides, format: targetFormat });
+      downloadBlob(blob, buildPromoFileName(product, targetFormat));
       notify(key, 'Tarjeta PNG descargada. Lista para tu Estado o publicación.');
     } catch {
       notify('', 'No se pudo generar la tarjeta. Intenta de nuevo.');
@@ -618,7 +621,10 @@ export const SocialShareModal = ({
   const handleCopyCard = async (key = 'copy-image', overrides = {}) => {
     try {
       setBusyKey(key);
-      const blob = await generateCardBlob(overrides);
+      const targetFormat = overrides.format || format;
+      const blob = (targetFormat === 'story' && pregeneratedStoryBlob && Object.keys(overrides).length === 0)
+        ? pregeneratedStoryBlob
+        : await generateCardBlob({ ...overrides, format: targetFormat });
       await copyBlobToClipboard(blob, activeText);
       notify(key, 'Tarjeta + copy copiados. Pega la imagen (Ctrl+V) y el texto en tu publicación.');
     } catch {

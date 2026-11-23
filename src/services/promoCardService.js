@@ -1114,6 +1114,45 @@ const fillRoundRect = (ctx, x, y, width, height, radius, fill) => {
   ctx.restore();
 };
 
+/**
+ * Dibuja una imagen emulando CSS object-cover (de borde a borde, cero márgenes blancos).
+ * Llena el 100% del contenedor superior sin distorsión, recortando simétricamente el excedente.
+ */
+const drawImageCover = (ctx, image, dx, dy, dw, dh) => {
+  if (!image || !image.width || !image.height) return;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  // Recorte exacto al área del contenedor de la imagen
+  ctx.beginPath();
+  ctx.rect(dx, dy, dw, dh);
+  ctx.clip();
+
+  const imgW = image.width;
+  const imgH = image.height;
+  const imgRatio = imgW / imgH;
+  const boxRatio = dw / dh;
+
+  let sx = 0;
+  let sy = 0;
+  let sw = imgW;
+  let sh = imgH;
+
+  if (imgRatio > boxRatio) {
+    // La imagen es más ancha que el contenedor -> recortar proporcionalmente lados
+    sw = Math.round(imgH * boxRatio);
+    sx = Math.round((imgW - sw) / 2);
+  } else {
+    // La imagen es más alta que el contenedor -> recortar proporcionalmente arriba/abajo
+    sh = Math.round(imgW / boxRatio);
+    sy = Math.round((imgH - sh) / 2);
+  }
+
+  ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
+  ctx.restore();
+};
+
 const wrapText = (ctx, text, maxWidth, maxLines) => {
   const words = String(text || '')
     .replace(/\s+/g, ' ')
@@ -1897,21 +1936,13 @@ const drawSquare = (ctx, width, height, data, palette, image, logo, glassEffect 
   roundRect(ctx, pad, pad, cardW, cardH, radius);
   ctx.clip();
 
-  // 1. Imagen Superior Protagónica
-  const imgBoxH = 560;
+  // 1. Imagen Superior Protagónica Full-Bleed (65% del Área Visual - Cero Espacios Blancos)
+  const imgBoxH = 640;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(pad, pad, cardW, imgBoxH);
 
   if (image && image.width && image.height) {
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    const padding = 36;
-    const scale = Math.min((cardW - padding * 2) / image.width, (imgBoxH - padding * 2) / image.height);
-    const drawW = image.width * scale;
-    const drawH = image.height * scale;
-    ctx.drawImage(image, pad + (cardW - drawW) / 2, pad + (imgBoxH - drawH) / 2, drawW, drawH);
-    ctx.restore();
+    drawImageCover(ctx, image, pad, pad, cardW, imgBoxH);
   }
 
   // Divisor inferior de la imagen
@@ -1937,73 +1968,66 @@ const drawSquare = (ctx, width, height, data, palette, image, logo, glassEffect 
   }
 
   // Contador de fotos
-  ctx.save();
-  ctx.font = `700 20px ${FONT_HEAD}`;
-  fillRoundRect(ctx, pad + cardW - 80, pad + 24, 56, 38, 10, 'rgba(15,23,42,0.7)');
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('📷 2', pad + cardW - 52, pad + 24 + 20);
-  ctx.restore();
+  if (data.photoCount > 1) {
+    ctx.save();
+    ctx.font = `700 20px ${FONT_HEAD}`;
+    fillRoundRect(ctx, pad + cardW - 80, pad + 24, 56, 38, 10, 'rgba(15,23,42,0.7)');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`📷 ${data.photoCount}`, pad + cardW - 52, pad + 24 + 20);
+    ctx.restore();
+  }
 
   // 2. Fila Marca y Calificación
   const contentPad = pad + 36;
   const contentW = cardW - 72;
-  const brandY = pad + imgBoxH + 46;
+  const brandY = pad + imgBoxH + 34;
 
   ctx.save();
-  ctx.font = `800 24px ${FONT_HEAD}`;
+  ctx.font = `800 22px ${FONT_HEAD}`;
   ctx.fillStyle = '#0A6CFF';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(data.brand.toUpperCase(), contentPad, brandY);
+  ctx.fillText((data.brand || 'JavrelStore').toUpperCase(), contentPad, brandY);
 
   // Rating
   ctx.fillStyle = '#F59E0B';
   ctx.textAlign = 'right';
-  ctx.fillText(`★ ${data.rating} 0`, contentPad + contentW, brandY);
+  ctx.fillText(`★ ${data.rating || '5.0'}`, contentPad + contentW, brandY);
   ctx.restore();
 
   // 3. Título del producto
-  const titleY = brandY + 34;
+  const titleY = brandY + 28;
   drawWrappedText(
     ctx,
     data.productName,
     contentPad,
     titleY,
     contentW,
-    44,
+    38,
     2,
-    `800 36px ${FONT_HEAD}`,
+    `800 34px ${FONT_HEAD}`,
     isDark ? '#FFFFFF' : '#0F172A'
   );
 
-  // 4. Descripción corta (2 líneas)
-  const descY = titleY + 98;
+  // 4. Insignia / Detalle técnico con salto de línea automático (CERO CORTES)
+  const specY = titleY + 84;
+  const specText = data.specHighlight || data.description || 'Garantía Oficial Directa · Despacho Inmediato';
   drawWrappedText(
     ctx,
-    data.description || 'Dispositivo Tecnológico Inteligente diseñado para ofrecer el máximo rendimiento.',
+    `✓ ${specText}`,
     contentPad,
-    descY,
+    specY,
     contentW,
-    30,
+    26,
     2,
-    `600 22px ${FONT_BODY}`,
-    isDark ? 'rgba(255,255,255,0.7)' : '#64748B'
+    `700 20px ${FONT_HEAD}`,
+    '#059669'
   );
 
-  // 5. Insignia / Detalle técnico con check verde
-  const specY = descY + 74;
-  ctx.save();
-  ctx.font = `700 22px ${FONT_HEAD}`;
-  ctx.fillStyle = '#059669';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`✓ ${data.specHighlight}`, contentPad, specY);
-  ctx.restore();
-
   // Divisor para precios
-  const priceDivY = specY + 28;
+  const priceDivY = specY + 54;
   ctx.beginPath();
   ctx.moveTo(contentPad, priceDivY);
   ctx.lineTo(contentPad + contentW, priceDivY);
@@ -2011,8 +2035,8 @@ const drawSquare = (ctx, width, height, data, palette, image, logo, glassEffect 
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // 6. Precios
-  const priceY = priceDivY + 38;
+  // 5. Precios
+  const priceY = priceDivY + 36;
   ctx.save();
   ctx.font = `900 48px ${FONT_HEAD}`;
   ctx.fillStyle = isDark ? '#FFFFFF' : '#0F172A';
@@ -2038,8 +2062,8 @@ const drawSquare = (ctx, width, height, data, palette, image, logo, glassEffect 
   }
   ctx.restore();
 
-  // 7. Franja de enlace al pie
-  const footerDivY = pad + cardH - 58;
+  // 6. Sello de marca limpio al pie (CERO URLs impresas internamente)
+  const footerDivY = pad + cardH - 46;
   ctx.beginPath();
   ctx.moveTo(contentPad, footerDivY);
   ctx.lineTo(contentPad + contentW, footerDivY);
@@ -2047,18 +2071,13 @@ const drawSquare = (ctx, width, height, data, palette, image, logo, glassEffect 
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  const footerY = footerDivY + 30;
+  const footerY = footerDivY + 23;
   ctx.save();
-  ctx.font = `600 20px ${FONT_BODY}`;
-  ctx.fillStyle = '#64748B';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`javrelstore.shop/p/${data.slug}`, contentPad, footerY);
-
   ctx.font = `800 20px ${FONT_HEAD}`;
   ctx.fillStyle = '#0A6CFF';
-  ctx.textAlign = 'right';
-  ctx.fillText('● JavrelStore', contentPad + contentW, footerY);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('• JavrelStore', contentPad + contentW / 2, footerY);
   ctx.restore();
 
   ctx.restore(); // fin clip
@@ -2092,32 +2111,13 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   roundRect(ctx, pad, pad, cardW, cardH, radius);
   ctx.clip();
 
-  // ── 1. IMAGEN SUPERIOR PROTAGÓNICA (65% - 70% del Área Visual) ──────────
-  // imgBoxH = 1270px (~66.15% del canvas de 1920px), máxima prioridad a la fotografía
+  // ── 1. IMAGEN SUPERIOR PROTAGÓNICA FULL-BLEED (65% - 70% del Área Visual - Cero Espacios Blancos) ──
   const imgBoxH = 1270;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(pad, pad, cardW, imgBoxH);
 
   if (image && image.width && image.height) {
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    // Margen ultra limpio (16px) para que el producto sea el protagonista sin marcos vacíos
-    const imgPad = 16;
-    const scale = Math.min(
-      (cardW - imgPad * 2) / image.width,
-      (imgBoxH - imgPad * 2) / image.height
-    );
-    const drawW = image.width * scale;
-    const drawH = image.height * scale;
-    ctx.drawImage(
-      image,
-      pad + (cardW - drawW) / 2,
-      pad + (imgBoxH - drawH) / 2,
-      drawW,
-      drawH
-    );
-    ctx.restore();
+    drawImageCover(ctx, image, pad, pad, cardW, imgBoxH);
   }
 
   // Divisor inferior de la imagen
@@ -2295,21 +2295,13 @@ const drawPortrait = (ctx, width, height, data, palette, image, logo, glassEffec
   roundRect(ctx, pad, pad, cardW, cardH, radius);
   ctx.clip();
 
-  // 1. Imagen Superior Protagónica 4:5 (h ≈ 740px)
-  const imgBoxH = 740;
+  // 1. Imagen Superior Protagónica 4:5 (h ≈ 860px - Cero Espacios Blancos)
+  const imgBoxH = 860;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(pad, pad, cardW, imgBoxH);
 
   if (image && image.width && image.height) {
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    const padding = 40;
-    const scale = Math.min((cardW - padding * 2) / image.width, (imgBoxH - padding * 2) / image.height);
-    const drawW = image.width * scale;
-    const drawH = image.height * scale;
-    ctx.drawImage(image, pad + (cardW - drawW) / 2, pad + (imgBoxH - drawH) / 2, drawW, drawH);
-    ctx.restore();
+    drawImageCover(ctx, image, pad, pad, cardW, imgBoxH);
   }
 
   // Divisor inferior de la imagen
@@ -2334,14 +2326,16 @@ const drawPortrait = (ctx, width, height, data, palette, image, logo, glassEffec
     ctx.restore();
   }
 
-  ctx.save();
-  ctx.font = `700 22px ${FONT_HEAD}`;
-  fillRoundRect(ctx, pad + cardW - 90, pad + 26, 64, 42, 10, 'rgba(15,23,42,0.7)');
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('📷 2', pad + cardW - 58, pad + 26 + 22);
-  ctx.restore();
+  if (data.photoCount > 1) {
+    ctx.save();
+    ctx.font = `700 22px ${FONT_HEAD}`;
+    fillRoundRect(ctx, pad + cardW - 90, pad + 26, 64, 42, 10, 'rgba(15,23,42,0.7)');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`📷 ${data.photoCount}`, pad + cardW - 58, pad + 26 + 22);
+    ctx.restore();
+  }
 
   // 2. Fila Marca y Calificación
   const contentPad = pad + 40;
@@ -2353,11 +2347,11 @@ const drawPortrait = (ctx, width, height, data, palette, image, logo, glassEffec
   ctx.fillStyle = '#0A6CFF';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(data.brand.toUpperCase(), contentPad, brandY);
+  ctx.fillText((data.brand || 'JavrelStore').toUpperCase(), contentPad, brandY);
 
   ctx.fillStyle = '#F59E0B';
   ctx.textAlign = 'right';
-  ctx.fillText(`★ ${data.rating} 0`, contentPad + contentW, brandY);
+  ctx.fillText(`★ ${data.rating || '5.0'}`, contentPad + contentW, brandY);
   ctx.restore();
 
   // 3. Título del producto
@@ -2388,18 +2382,23 @@ const drawPortrait = (ctx, width, height, data, palette, image, logo, glassEffec
     isDark ? 'rgba(255,255,255,0.7)' : '#64748B'
   );
 
-  // 5. Insignia / Detalle técnico con check verde
+  // 5. Insignia / Detalle técnico con check verde y auto-wrap (CERO CORTES)
   const specY = descY + 80;
-  ctx.save();
-  ctx.font = `800 24px ${FONT_HEAD}`;
-  ctx.fillStyle = '#059669';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`✓ ${data.specHighlight}`, contentPad, specY);
-  ctx.restore();
+  const specText = data.specHighlight || data.description || 'Garantía Oficial Directa · Despacho Inmediato';
+  drawWrappedText(
+    ctx,
+    `✓ ${specText}`,
+    contentPad,
+    specY,
+    contentW,
+    28,
+    2,
+    `800 24px ${FONT_HEAD}`,
+    '#059669'
+  );
 
   // Divisor para precios
-  const priceDivY = specY + 32;
+  const priceDivY = specY + 60;
   ctx.beginPath();
   ctx.moveTo(contentPad, priceDivY);
   ctx.lineTo(contentPad + contentW, priceDivY);
@@ -2434,7 +2433,7 @@ const drawPortrait = (ctx, width, height, data, palette, image, logo, glassEffec
   }
   ctx.restore();
 
-  // 7. Franja de enlace al pie
+  // 7. Sello de marca limpio al pie (CERO URLs internas)
   const footerDivY = pad + cardH - 68;
   ctx.beginPath();
   ctx.moveTo(contentPad, footerDivY);
@@ -2445,16 +2444,11 @@ const drawPortrait = (ctx, width, height, data, palette, image, logo, glassEffec
 
   const footerY = footerDivY + 35;
   ctx.save();
-  ctx.font = `600 22px ${FONT_BODY}`;
-  ctx.fillStyle = '#64748B';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`javrelstore.shop/p/${data.slug}`, contentPad, footerY);
-
-  ctx.font = `800 22px ${FONT_HEAD}`;
+  ctx.font = `800 24px ${FONT_HEAD}`;
   ctx.fillStyle = '#0A6CFF';
-  ctx.textAlign = 'right';
-  ctx.fillText('● JavrelStore', contentPad + contentW, footerY);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('• JavrelStore', contentPad + contentW / 2, footerY);
   ctx.restore();
 
   ctx.restore();
@@ -2488,7 +2482,7 @@ const drawLandscape = (ctx, width, height, data, palette, image, logo, glassEffe
   roundRect(ctx, pad, pad, cardW, cardH, radius);
   ctx.clip();
 
-  // Disposición en 2 columnas: Columna izquierda = Imagen cuadrada (520x520)
+  // Disposición en 2 columnas: Columna izquierda = Imagen Full-Bleed (520x520)
   const imgBoxW = Math.min(cardH, 520);
   const imgBoxH = cardH;
 
@@ -2496,15 +2490,7 @@ const drawLandscape = (ctx, width, height, data, palette, image, logo, glassEffe
   ctx.fillRect(pad, pad, imgBoxW, imgBoxH);
 
   if (image && image.width && image.height) {
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    const padding = 32;
-    const scale = Math.min((imgBoxW - padding * 2) / image.width, (imgBoxH - padding * 2) / image.height);
-    const drawW = image.width * scale;
-    const drawH = image.height * scale;
-    ctx.drawImage(image, pad + (imgBoxW - drawW) / 2, pad + (imgBoxH - drawH) / 2, drawW, drawH);
-    ctx.restore();
+    drawImageCover(ctx, image, pad, pad, imgBoxW, imgBoxH);
   }
 
   // Divisor vertical entre imagen y contenido
@@ -2575,18 +2561,23 @@ const drawLandscape = (ctx, width, height, data, palette, image, logo, glassEffe
     isDark ? 'rgba(255,255,255,0.7)' : '#64748B'
   );
 
-  // 4. Insignia
+  // 4. Insignia / Detalle con auto-wrap (CERO CORTES)
   const specY = descY + 70;
-  ctx.save();
-  ctx.font = `800 22px ${FONT_HEAD}`;
-  ctx.fillStyle = '#059669';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`✓ ${data.specHighlight}`, contentPad, specY);
-  ctx.restore();
+  const specText = data.specHighlight || data.description || 'Garantía Oficial Directa';
+  drawWrappedText(
+    ctx,
+    `✓ ${specText}`,
+    contentPad,
+    specY,
+    contentW,
+    24,
+    2,
+    `800 22px ${FONT_HEAD}`,
+    '#059669'
+  );
 
   // 5. Precios
-  const priceDivY = specY + 28;
+  const priceDivY = specY + 54;
   ctx.beginPath();
   ctx.moveTo(contentPad, priceDivY);
   ctx.lineTo(contentPad + contentW, priceDivY);
@@ -2620,7 +2611,7 @@ const drawLandscape = (ctx, width, height, data, palette, image, logo, glassEffe
   }
   ctx.restore();
 
-  // 6. Footer strip
+  // 6. Sello de marca limpio al pie (CERO URLs internas)
   const footerDivY = pad + cardH - 52;
   ctx.beginPath();
   ctx.moveTo(contentPad, footerDivY);
@@ -2631,16 +2622,11 @@ const drawLandscape = (ctx, width, height, data, palette, image, logo, glassEffe
 
   const footerY = footerDivY + 26;
   ctx.save();
-  ctx.font = `600 18px ${FONT_BODY}`;
-  ctx.fillStyle = '#64748B';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`javrelstore.shop/p/${data.slug}`, contentPad, footerY);
-
-  ctx.font = `800 18px ${FONT_HEAD}`;
+  ctx.font = `800 20px ${FONT_HEAD}`;
   ctx.fillStyle = '#0A6CFF';
-  ctx.textAlign = 'right';
-  ctx.fillText('● JavrelStore', contentPad + contentW, footerY);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('• JavrelStore', contentPad + contentW / 2, footerY);
   ctx.restore();
 
   ctx.restore();
@@ -2796,13 +2782,13 @@ export async function renderPromoCard({
   product,
   config = {},
   imageUrl,
-  format = 'square',
+  format = 'story',
   theme = 'classic',
   ctaText = 'Ver en Tienda',
   logoUrl = STORE_LOGO_URL,
   glassEffect = true,
   badgeConfig = null,
-  cardBorder = 'silver',
+  cardBorder = 'frameless',
 }) {
   if (typeof document === 'undefined') {
     throw new Error('La generación de tarjetas requiere un navegador.');
@@ -2813,9 +2799,9 @@ export async function renderPromoCard({
   const data = buildCardData(product, config, ctaText, badgeConfig);
 
   // 1) Composición completa sobre un lienzo interno.
-  // Para el formato story (9:16) aplicamos escala 3× para máxima nitidez (Ultra HD)
-  // en pantallas AMOLED y Retina al subir estados a WhatsApp / Instagram.
-  const dprScale = spec.id === 'story' ? 3 : 1;
+  // Escala 3× nativa para Ultra HD (1080x1920 en story, 1080x1080 en square, 1080x1350 en portrait)
+  // para máxima nitidez en pantallas móviles AMOLED y Retina sin pixelado
+  const dprScale = (spec.id === 'story' || spec.id === 'square' || spec.id === 'portrait') ? 3 : 2;
   const composition = document.createElement('canvas');
   composition.width = spec.width * dprScale;
   composition.height = spec.height * dprScale;

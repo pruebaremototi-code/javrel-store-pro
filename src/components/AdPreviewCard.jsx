@@ -666,11 +666,11 @@ export const AdPreviewCard = ({
         /* Disposición Horizontal (Panorámico 16:9 y Banner 1.91:1) */
         <div className="relative p-4 sm:p-5 h-full grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
           {/* Columna Izquierda: Imagen del Producto Limpia y Protagónica */}
-          <div className="relative h-full aspect-square max-h-[290px] mx-auto flex items-center justify-center overflow-hidden rounded-2xl bg-white border border-slate-100 shadow-sm p-3">
+          <div className="relative h-full aspect-square max-h-[290px] mx-auto flex items-center justify-center overflow-hidden rounded-2xl bg-white border border-slate-100 shadow-sm">
             <img
               src={imageUrl || '/zafra/logo-menu.webp'}
               alt={data.name}
-              className="relative z-2 h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+              className="relative z-2 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               loading="lazy"
               onError={(event) => {
                 event.currentTarget.src = '/zafra/logo-menu.webp';
@@ -748,14 +748,14 @@ export const AdPreviewCard = ({
       ) : (
         /* Disposición Vertical (Square 1:1, Story 9:16 y Portrait 4:5) — Réplica Fiel de la Tarjeta del Catálogo */
         <div className="relative h-full flex flex-col justify-between">
-          {/* 1. Imagen Protagonista Superior Full-Bleed sin marcos ni márgenes excesivos (65%-70%) */}
+          {/* 1. Imagen Protagonista Superior Full-Bleed sin marcos ni márgenes vacíos (65%-70%) */}
           <div className={`relative w-full overflow-hidden bg-white border-b border-slate-100 flex items-center justify-center ${
-            format === 'story' ? 'h-[66%] min-h-[340px]' : format === 'portrait' ? 'h-[54%] min-h-[240px]' : 'aspect-square h-[54%]'
+            format === 'story' ? 'h-[66%] min-h-[340px]' : format === 'portrait' ? 'h-[58%] min-h-[260px]' : 'aspect-square h-[62%]'
           }`}>
             <img
               src={imageUrl || '/zafra/logo-menu.webp'}
               alt={data.name}
-              className="relative z-2 h-full w-full object-contain p-4 sm:p-5 transition-transform duration-500 group-hover:scale-105"
+              className="relative z-2 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               loading="lazy"
               onError={(event) => {
                 event.currentTarget.src = '/zafra/logo-menu.webp';
@@ -798,10 +798,10 @@ export const AdPreviewCard = ({
                 {data.description || 'Dispositivo Tecnológico Inteligente diseñado para ofrecer el máximo rendimiento y confiabilidad.'}
               </p>
 
-              {/* Insignia / Estado o Detalle Técnico con Check Verde */}
-              <div className="flex items-center gap-1.5 text-[9.5px] sm:text-[10.5px] font-semibold text-emerald-600 uppercase mb-2 truncate">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                <span className="truncate font-mono-code">{specHighlight}</span>
+              {/* Insignia / Estado o Detalle Técnico con Check Verde (Auto-wrap sin cortes) */}
+              <div className="flex items-start gap-1.5 text-[9.5px] sm:text-[10.5px] font-semibold text-emerald-600 uppercase mb-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                <span className="font-mono-code leading-tight line-clamp-2">{specHighlight}</span>
               </div>
             </div>
 
