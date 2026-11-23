@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import {
   MessageCircle,
   Star,
@@ -8,7 +8,6 @@ import {
   ZoomIn,
   Share2,
   Images,
-  Sparkles,
   Eye,
 } from 'lucide-react';
 import { formatCurrency, buildWhatsAppUrl } from '../services/storeService';
@@ -19,7 +18,7 @@ import { EditableText } from './EditableText';
 import { EditablePrice } from './EditablePrice';
 import { lazyWithRetry } from '../utils/lazyWithRetry';
 
-// Lazy load del Centro de Difusión con reintento automático
+// Code-splitting resiliente — Centro de Difusión JavrelStore
 const SocialShareModal = lazyWithRetry(
   () => import('./SocialShareModal').then((m) => ({ default: m.SocialShareModal })),
   'SocialShareModal'
@@ -65,6 +64,7 @@ export const ProductCard = ({
       hasPermission?.(PERMISSIONS.EDIT_PAGE)
   );
   const canManageProducts = Boolean(hasPermission?.(PERMISSIONS.MANAGE_PRODUCTS));
+  const isAdminUser = Boolean(isAdmin || contextIsAdmin);
 
   // Variantes / colores si existen
   const variants = Array.isArray(product.variants)
@@ -257,9 +257,10 @@ export const ProductCard = ({
         editorActive ? 'ring-2 ring-[#0A6CFF]/40' : ''
       }`}
     >
-      {/* ── 1. Contenedor de Imagen Full-Bleed (Aspecto Square / 4:3 sin márgenes internos) ── */}
+      {/* ── 1. Contenedor de Imagen Full-Bleed 4:5 sin márgenes internos ── */}
       <div
-        className="relative w-full aspect-square overflow-hidden bg-slate-50 border-b border-slate-100"
+        className="relative w-full overflow-hidden bg-slate-50 border-b border-slate-100"
+        style={{ aspectRatio: '4/5' }}
       >
         {/* Badges Flotantes — Top Left */}
         <div className="absolute top-2.5 left-2.5 z-20 flex flex-col gap-1 items-start pointer-events-none">
@@ -311,6 +312,32 @@ export const ProductCard = ({
             }}
           />
         </button>
+
+        {/* ── Hover Info Overlay — desliza desde abajo, oculto en reposo ── */}
+        {!editorActive && (safeDescription || specHighlight) && (
+          <div
+            aria-hidden="true"
+            className="absolute bottom-0 left-0 right-0 z-10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out pointer-events-none"
+            style={{
+              background: 'linear-gradient(to top, rgba(10,15,30,0.96) 0%, rgba(10,15,30,0.85) 60%, transparent 100%)',
+              paddingTop: '28px',
+            }}
+          >
+            <div className="px-3.5 pb-3 space-y-1.5">
+              {safeDescription && (
+                <p className="text-[11px] leading-relaxed text-slate-200 line-clamp-3 font-sans font-medium">
+                  {safeDescription}
+                </p>
+              )}
+              {specHighlight && (
+                <p className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
+                  <CheckCircle2 className="w-3 h-3 flex-shrink-0 text-emerald-400" />
+                  <span className="truncate">{specHighlight}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Botón Lupa Zoom Flotante (Bottom-Right, visible en hover) */}
         <button
@@ -436,8 +463,8 @@ export const ProductCard = ({
           )}
         </div>
 
-        {/* ── 3. Precios y Botones de Acción Ergonómicos ── */}
-        <div className="pt-2 border-t border-slate-100">
+        {/* ── 3. Precios y Botones de Acción Ergonómicos (Fijados al fondo con mt-auto) ── */}
+        <div className="mt-auto pt-2.5 border-t border-slate-100">
           {editorActive ? (
             <div className="flex flex-col gap-1.5 mb-2" data-price-editor="true">
               <EditablePrice
@@ -482,44 +509,47 @@ export const ProductCard = ({
           )}
 
           {/* Fila de Botones: [Agregar] (Principal) + [Ojo/QuickView] + [WhatsApp] */}
-          <div className="flex items-center gap-1 sm:gap-1.5">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* AGREGAR — CTA azul eléctrico, texto siempre visible */}
             <button
               type="button"
               onClick={() => onAddToCart({ ...product, price: effectivePrice })}
-              className="flex-1 min-w-0 inline-flex items-center justify-center gap-1 min-h-[38px] sm:min-h-[42px] py-1.5 px-2 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold text-white bg-gradient-to-r from-[#0A6CFF] to-[#0052FF] hover:from-[#0052FF] hover:to-[#0040cc] active:scale-95 shadow-md shadow-blue-500/20 transition-all cursor-pointer touch-manipulation"
+              className="flex-1 min-w-0 inline-flex items-center justify-center gap-1 sm:gap-1.5 min-h-[38px] sm:min-h-[44px] py-1.5 sm:py-2 px-1.5 sm:px-3 rounded-xl text-[10.5px] sm:text-xs font-bold text-white bg-gradient-to-r from-[#0A6CFF] to-[#0052FF] hover:from-[#0052FF] hover:to-[#0040cc] active:scale-95 shadow-md shadow-blue-500/20 transition-all cursor-pointer touch-manipulation"
               title="Añadir al Carrito"
             >
-              <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+              <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               <span className="truncate">Agregar</span>
             </button>
 
+            {/* Vista rápida — ojo azul */}
             <button
               type="button"
               onClick={handleOpenDetailModal}
-              className="inline-flex shrink-0 items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-50/80 border border-blue-200/80 text-[#0A6CFF] hover:bg-blue-100 hover:border-blue-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
+              className="inline-flex shrink-0 items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-blue-50/80 border border-blue-200/80 text-[#0A6CFF] hover:bg-blue-100 hover:border-blue-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
               title="Vista rápida del producto"
               aria-label={`Ver detalles de ${safeName}`}
             >
-              <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Eye className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </button>
 
+            {/* WhatsApp — verde esmeralda */}
             <a
               href={whatsappUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex shrink-0 items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-400 active:scale-95 shadow-2xs transition-all cursor-pointer touch-manipulation"
+              className="inline-flex shrink-0 items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
               title="Consultar por WhatsApp"
               aria-label={`Consultar ${safeName} por WhatsApp`}
             >
-              <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <MessageCircle className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </a>
           </div>
         </div>
       </div>
 
-      {/* Centro de Difusión */}
+      {/* ── Centro de Difusión JavrelStore ── */}
       {isShareOpen && (
-        <React.Suspense fallback={null}>
+        <Suspense fallback={null}>
           <SocialShareModal
             isOpen
             product={product}
@@ -527,7 +557,7 @@ export const ProductCard = ({
             isAdmin={Boolean(isAdmin || contextIsAdmin)}
             onClose={() => setIsShareOpen(false)}
           />
-        </React.Suspense>
+        </Suspense>
       )}
     </div>
   );

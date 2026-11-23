@@ -734,7 +734,9 @@ export const AdPreviewCard = ({
                 )}
               </div>
               <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-mono-code text-slate-400">
-                <span className="truncate text-slate-500">javrelstore.shop/p/{productSlug}</span>
+                <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                  ✓ Garantía Oficial Directa
+                </span>
                 <span className="font-bold text-[#0A6CFF] flex items-center gap-1 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#0A6CFF]" />
                   JavrelStore
@@ -748,7 +750,7 @@ export const AdPreviewCard = ({
         <div className="relative h-full flex flex-col justify-between">
           {/* 1. Imagen Protagonista Superior Full-Bleed sin marcos ni márgenes excesivos */}
           <div className={`relative w-full overflow-hidden bg-white border-b border-slate-100 flex items-center justify-center ${
-            format === 'story' ? 'h-[58%] min-h-[300px]' : format === 'portrait' ? 'h-[54%] min-h-[240px]' : 'aspect-square h-[54%]'
+            format === 'story' ? 'h-[60%] min-h-[320px]' : format === 'portrait' ? 'h-[54%] min-h-[240px]' : 'aspect-square h-[54%]'
           }`}>
             <img
               src={imageUrl || '/zafra/logo-menu.webp'}
@@ -816,9 +818,11 @@ export const AdPreviewCard = ({
                 )}
               </div>
 
-              {/* Franja sutil con dominio corto y marca JavrelStore */}
+              {/* Franja sutil con sello JavrelStore (sin URL en el arte) */}
               <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[9.5px] sm:text-[10px] font-mono-code text-slate-400">
-                <span className="truncate text-slate-500">javrelstore.shop/p/{productSlug}</span>
+                <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                  ✓ Despacho Inmediato
+                </span>
                 <span className="font-bold text-[#0A6CFF] flex items-center gap-1 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#0A6CFF]" />
                   JavrelStore

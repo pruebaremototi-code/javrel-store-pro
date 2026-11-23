@@ -2071,10 +2071,6 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   const radius = 42;
   const isDark = palette.isDark;
 
-  // ─── ZONA SEGURA: nada se dibujará por debajo de este límite ───────────────
-  // WhatsApp/Instagram Stories cubren ~280px del fondo con el caption.
-  const SAFE_ZONE_BOTTOM = height - 300; // y = 1620
-
   // Fondo de la tarjeta con sombra perimetral
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.22)';
@@ -2096,9 +2092,9 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   roundRect(ctx, pad, pad, cardW, cardH, radius);
   ctx.clip();
 
-  // ── 1. IMAGEN SUPERIOR PROTAGÓNICA ─────────────────────────────────────────
-  // Reducida a 920px (en lugar de 1080) para liberar espacio de contenido
-  const imgBoxH = 920;
+  // ── 1. IMAGEN SUPERIOR PROTAGÓNICA (58% - 62% del alto total 1920px) ─────
+  // imgBoxH = 1140px (~59.4% del canvas total de 1920px), eliminando espacios vacíos
+  const imgBoxH = 1140;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(pad, pad, cardW, imgBoxH);
 
@@ -2106,7 +2102,8 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    const imgPad = 52;
+    // Padding mínimo (24px) para que la fotografía llene generosamente el contenedor
+    const imgPad = 24;
     const scale = Math.min(
       (cardW - imgPad * 2) / image.width,
       (imgBoxH - imgPad * 2) / image.height
@@ -2123,7 +2120,7 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
     ctx.restore();
   }
 
-  // Divisor inferior imagen
+  // Divisor inferior de la imagen
   ctx.beginPath();
   ctx.moveTo(pad, pad + imgBoxH);
   ctx.lineTo(pad + cardW, pad + imgBoxH);
@@ -2157,14 +2154,13 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
     ctx.restore();
   }
 
-  // ── 2. FILA MARCA + CALIFICACIÓN ───────────────────────────────────────────
+  // ── 2. FILA MARCA + CALIFICACIÓN (por debajo de la imagen) ─────────────────
   const contentPad = pad + 48;
   const contentW = cardW - 96;
-  // brandY arranca justo debajo de la imagen con un gap cómodo
-  const brandY = pad + imgBoxH + 72; // y ≈ 1040
+  const brandY = pad + imgBoxH + 46; // y = 1234
 
   ctx.save();
-  ctx.font = `800 30px ${FONT_HEAD}`;
+  ctx.font = `800 28px ${FONT_HEAD}`;
   ctx.fillStyle = '#0A6CFF';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -2175,37 +2171,36 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   ctx.fillText(`★ ${data.rating || '5.0'}`, contentPad + contentW, brandY);
   ctx.restore();
 
-  // ── 3. TÍTULO DEL PRODUCTO ─────────────────────────────────────────────────
-  // Gap aumentado a +72 (antes +46) para evitar la superposición con el brand
-  const titleY = brandY + 72; // y ≈ 1112
+  // ── 3. TÍTULO DEL PRODUCTO (con wrapping limpio) ───────────────────────────
+  const titleY = brandY + 44; // y = 1278
   drawWrappedText(
     ctx,
     data.productName,
     contentPad,
     titleY,
     contentW,
-    58,   // lineHeight
+    52,   // lineHeight
     2,    // maxLines
-    `800 48px ${FONT_HEAD}`,
+    `800 44px ${FONT_HEAD}`,
     isDark ? '#FFFFFF' : '#0F172A'
   );
 
-  // ── 4. DESCRIPCIÓN CORTA (2 líneas, con wrapping) ─────────────────────────
-  const descY = titleY + 130; // y ≈ 1242
+  // ── 4. DESCRIPCIÓN CORTA (2 líneas compactas) ─────────────────────────────
+  const descY = titleY + 88; // y = 1366
   drawWrappedText(
     ctx,
-    data.description || 'Dispositivo tecnológico diseñado para el máximo rendimiento.',
+    data.description || 'Dispositivo tecnológico diseñado para ofrecer el máximo rendimiento.',
     contentPad,
     descY,
     contentW,
-    40,   // lineHeight
+    34,   // lineHeight
     2,    // maxLines
-    `500 28px ${FONT_BODY}`,
+    `500 24px ${FONT_BODY}`,
     isDark ? 'rgba(255,255,255,0.7)' : '#64748B'
   );
 
-  // ── 5. SPEC HIGHLIGHT con wrapping (evita truncación) ─────────────────────
-  const specY = descY + 100; // y ≈ 1342
+  // ── 5. SPEC HIGHLIGHT con wrapping (evita truncación horizontal) ──────────
+  const specY = descY + 74; // y = 1440
   if (data.specHighlight) {
     drawWrappedText(
       ctx,
@@ -2213,15 +2208,15 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
       contentPad,
       specY,
       contentW,
-      36,   // lineHeight
+      30,   // lineHeight
       2,    // maxLines
-      `700 27px ${FONT_HEAD}`,
+      `700 24px ${FONT_HEAD}`,
       '#059669'
     );
   }
 
   // ── 6. DIVISOR + PRECIOS ───────────────────────────────────────────────────
-  const priceDivY = specY + 88; // y ≈ 1430
+  const priceDivY = specY + 48; // y = 1488
   ctx.beginPath();
   ctx.moveTo(contentPad, priceDivY);
   ctx.lineTo(contentPad + contentW, priceDivY);
@@ -2229,9 +2224,9 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  const priceY = priceDivY + 62; // y ≈ 1492
+  const priceY = priceDivY + 54; // y = 1542
   ctx.save();
-  ctx.font = `900 64px ${FONT_HEAD}`;
+  ctx.font = `900 60px ${FONT_HEAD}`;
   ctx.fillStyle = isDark ? '#FFFFFF' : '#0F172A';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -2241,64 +2236,54 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
 
   if (data.hasRegular) {
     const regStr = formatCurrency(data.regular);
-    ctx.font = `600 34px ${FONT_HEAD}`;
+    ctx.font = `600 32px ${FONT_HEAD}`;
     ctx.fillStyle = '#94A3B8';
-    const regX = contentPad + offerW + 24;
-    ctx.fillText(regStr, regX, priceY + 4);
+    const regX = contentPad + offerW + 20;
+    ctx.fillText(regStr, regX, priceY + 3);
     const regW = ctx.measureText(regStr).width;
     ctx.beginPath();
-    ctx.moveTo(regX, priceY + 4);
-    ctx.lineTo(regX + regW, priceY + 4);
+    ctx.moveTo(regX, priceY + 3);
+    ctx.lineTo(regX + regW, priceY + 3);
     ctx.strokeStyle = '#94A3B8';
     ctx.lineWidth = 2.5;
     ctx.stroke();
   }
   ctx.restore();
 
-  // ── 7. BOTÓN CTA VISUAL (decorativo, dentro de zona segura) ───────────────
-  const ctaY = priceY + 88; // y ≈ 1580
-  if (ctaY + 72 < SAFE_ZONE_BOTTOM) {
-    const ctaBtnW = contentW;
-    const ctaBtnH = 72;
-    ctx.save();
-    // Degradado azul del botón
-    const ctaGrad = ctx.createLinearGradient(contentPad, ctaY, contentPad + ctaBtnW, ctaY);
-    ctaGrad.addColorStop(0, '#0A6CFF');
-    ctaGrad.addColorStop(1, '#0050CC');
-    fillRoundRect(ctx, contentPad, ctaY, ctaBtnW, ctaBtnH, 20, ctaGrad);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = `800 32px ${FONT_HEAD}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('Ver en JavrelStore →', contentPad + ctaBtnW / 2, ctaY + ctaBtnH / 2);
-    ctx.restore();
-  }
+  // ── 7. BOTÓN CTA VISUAL ("Comprar en Tienda" - Zona Segura Superior) ─────
+  const ctaY = priceY + 50; // y = 1592
+  const ctaBtnW = contentW;
+  const ctaBtnH = 68;
+  ctx.save();
+  const ctaGrad = ctx.createLinearGradient(contentPad, ctaY, contentPad + ctaBtnW, ctaY);
+  ctaGrad.addColorStop(0, '#0A6CFF');
+  ctaGrad.addColorStop(1, '#0050CC');
+  fillRoundRect(ctx, contentPad, ctaY, ctaBtnW, ctaBtnH, 18, ctaGrad);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = `800 30px ${FONT_HEAD}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Comprar en Tienda →', contentPad + ctaBtnW / 2, ctaY + ctaBtnH / 2);
+  ctx.restore();
 
-  // ── 8. FRANJA DE MARCA JAVRELSTORE (logo + nombre, SIN URL) ───────────────
-  // Posicionada justo arriba de la zona segura
-  const logoStripY = SAFE_ZONE_BOTTOM - 72; // y ≈ 1548 — ajustar si CTA está activo
-  const brandStripY = ctaY + 72 < SAFE_ZONE_BOTTOM
-    ? Math.min(ctaY + 72 + 36, SAFE_ZONE_BOTTOM - 60)
-    : logoStripY;
+  // ── 8. SELLO LIMPIO JAVRELSTORE (CERO URLs INTERNAS) ──────────────────────
+  // Posicionado con margen seguro (~1700px), por encima de controles de WhatsApp
+  const brandStripY = ctaY + ctaBtnH + 34; // y = 1694
 
-  if (brandStripY + 48 < height) {
-    // Divisor superior de la franja de marca
-    ctx.beginPath();
-    ctx.moveTo(contentPad, brandStripY - 20);
-    ctx.lineTo(contentPad + contentW, brandStripY - 20);
-    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(contentPad, brandStripY - 14);
+  ctx.lineTo(contentPad + contentW, brandStripY - 14);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 
-    ctx.save();
-    // Punto azul + nombre de marca
-    ctx.font = `800 28px ${FONT_HEAD}`;
-    ctx.fillStyle = '#0A6CFF';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('● JavrelStore', contentPad + contentW / 2, brandStripY + 20);
-    ctx.restore();
-  }
+  ctx.save();
+  ctx.font = `800 24px ${FONT_HEAD}`;
+  ctx.fillStyle = '#0A6CFF';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('● JavrelStore Oficial', contentPad + contentW / 2, brandStripY + 16);
+  ctx.restore();
 
   // ── FIN DEL CLIP ──────────────────────────────────────────────────────────
   ctx.restore();
@@ -2850,13 +2835,13 @@ export async function renderPromoCard({
   const data = buildCardData(product, config, ctaText, badgeConfig);
 
   // 1) Composición completa sobre un lienzo interno.
-  // Para el formato story (9:16) aplicamos escala 2× para nitidez en pantallas
-  // de alta densidad (Retina / AMOLED). Los demás formatos mantienen 1×.
-  const dprScale = spec.id === 'story' ? 2 : 1;
+  // Para el formato story (9:16) aplicamos escala 3× para máxima nitidez (Ultra HD)
+  // en pantallas AMOLED y Retina al subir estados a WhatsApp / Instagram.
+  const dprScale = spec.id === 'story' ? 3 : 1;
   const composition = document.createElement('canvas');
   composition.width = spec.width * dprScale;
   composition.height = spec.height * dprScale;
-  if (spec.id === 'story') {
+  if (dprScale > 1) {
     composition.style.width = `${spec.width}px`;
     composition.style.height = `${spec.height}px`;
   }
@@ -2897,10 +2882,17 @@ export async function renderPromoCard({
 
   // 3) Marco exterior decorativo: para opciones con marco (Plateado Claro, Blanco Puro, Sutil/Oscuro).
   const canvas = document.createElement('canvas');
-  canvas.width = spec.width;
-  canvas.height = spec.height;
+  canvas.width = spec.width * dprScale;
+  canvas.height = spec.height * dprScale;
+  if (dprScale > 1) {
+    canvas.style.width = `${spec.width}px`;
+    canvas.style.height = `${spec.height}px`;
+  }
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('No se pudo inicializar el canvas.');
+  if (dprScale > 1) {
+    ctx.scale(dprScale, dprScale);
+  }
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
