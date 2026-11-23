@@ -216,8 +216,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
     () =>
       typeof navigator !== 'undefined' &&
       typeof navigator.share === 'function' &&
-      isMobile &&
-      canShareNativeFiles(),
+      isMobile,
     [isMobile]
   );
   const [prepTarget, setPrepTarget] = useState(null);
@@ -433,6 +432,26 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
     [product, cardConfig, imageUrl, format, theme, ctaText, cardLogoUrl, glassEffect, badgeConfig, cardBorder]
   );
 
+  // Pre-generación asíncrona de la tarjeta 9:16 en segundo plano para compartir instantáneo (0ms) en móvil
+  const [pregeneratedStoryBlob, setPregeneratedStoryBlob] = useState(null);
+
+  useEffect(() => {
+    if (!isOpen || !product) return undefined;
+    let cancelled = false;
+    generateCardBlob({ format: 'story' })
+      .then((blob) => {
+        if (!cancelled && blob) {
+          setPregeneratedStoryBlob(blob);
+        }
+      })
+      .catch((err) => {
+        console.warn('[Pre-generación 9:16]', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, product?.id, imageUrl, generateCardBlob]);
+
   useEffect(() => {
     if (!isOpen || !product || previewMode !== 'graphic') return undefined;
     let cancelled = false;
@@ -577,7 +596,9 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
       setBusyKey(key);
       const targetFormat = overrides.format || format;
       const textToShare = overrides.text || activeText;
-      const blob = await generateCardBlob({ format: targetFormat });
+      const blob = (targetFormat === 'story' && pregeneratedStoryBlob)
+        ? pregeneratedStoryBlob
+        : await generateCardBlob({ format: targetFormat });
       const fileName = buildPromoFileName(product, targetFormat);
 
       await shareNativePromoCard({
@@ -689,11 +710,11 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
       setBusyKey(key);
       const textToShare = activeText || whatsappText;
 
-      // 1) En dispositivos móviles con Web Share API (Android / iOS):
-      // Enviamos el paquete completo: Imagen Ultra HD 9:16 + Texto con descripción y enlace oficial
-      if (isMobile && canShare) {
+      // 1) En Android / Móvil: Prioridad absoluta a Web Share API nativa con files + text
+      // Abre directamente el selector nativo con la tarjeta 9:16 Ultra HD y el caption con link
+      if (isMobile && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
         try {
-          const blob = await generateCardBlob({ format: 'story' });
+          const blob = pregeneratedStoryBlob || await generateCardBlob({ format: 'story' });
           const fileName = buildPromoFileName(product, 'story');
           await shareNativePromoCard({
             blob,
@@ -706,16 +727,18 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
           return;
         } catch (nativeErr) {
           if (nativeErr?.name === 'AbortError') return;
-          console.warn('[handleDirectWhatsAppShare] Fallback a enlace universal:', nativeErr);
+          console.warn('[handleDirectWhatsAppShare] Fallback a enlace web:', nativeErr);
         }
       }
 
-      // 2) Fallback universal web inmediato (cero bloqueos ni protocolos obsoletos)
-      const waUrl = buildWhatsAppChatUrl(textToShare);
+      // 2) En Escritorio (PC): Redirige limpiamente a WhatsApp Web oficial y copia el texto al portapapeles
       try {
         await writeTextToClipboard(textToShare);
       } catch {}
-      openWindow(waUrl);
+      const desktopWaUrl = isMobile
+        ? buildWhatsAppChatUrl(textToShare)
+        : `https://web.whatsapp.com/send?text=${encodeURIComponent(textToShare)}`;
+      openWindow(desktopWaUrl);
       notify(key, 'WhatsApp abierto con mensaje oficial y enlace del producto.');
     } catch {
       openWindow(buildWhatsAppChatUrl(activeText || whatsappText));
@@ -854,11 +877,11 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
         await writeTextToClipboard(productUrl);
       } catch (_e) {}
 
-      const blob = await generateCardBlob({ format: 'story' });
+      const blob = pregeneratedStoryBlob || await generateCardBlob({ format: 'story' });
       const fileName = buildPromoFileName(product, 'story');
       const compactText = statusText;
 
-      if (isMobile && canShare) {
+      if (isMobile && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
         try {
           await shareNativePromoCard({
             blob,
@@ -867,7 +890,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
             text: compactText,
             url: productUrl,
           });
-          notify(key, '¡Tarjeta 9:16 lista y enlace copiado! Pégalo en el sticker de tu historia.');
+          notify(key, '¡Tarjeta 9:16 y enlace enviados a compartir!');
           return;
         } catch (nativeErr) {
           if (nativeErr?.name === 'AbortError') return;
@@ -882,11 +905,13 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
 
       if (channelKey === 'twitter') {
         openWindow(`https://twitter.com/intent/tweet?text=${encodeURIComponent(compactText)}&url=${encodeURIComponent(productUrl)}`);
+      } else if (channelKey === 'whatsapp') {
+        openWindow(`https://web.whatsapp.com/send?text=${encodeURIComponent(compactText)}`);
       } else if (STORY_URLS[channelKey]) {
         openWindow(STORY_URLS[channelKey]);
       }
 
-      notify(key, '¡Tarjeta 9:16 lista y enlace copiado! Pégalo en el sticker de tu historia.');
+      notify(key, '¡Tarjeta 9:16 lista y enlace copiado!');
     } catch (err) {
       if (err?.name === 'AbortError') return;
       console.warn('Error al compartir a la historia:', err);
@@ -2080,7 +2105,7 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
                     </p>
                   </div>
 
-                  {/* 1. Botón Principal Directo de WhatsApp (Esquema Universal Optimizado) */}
+                  {/* 1. Botón Principal Directo de WhatsApp (Modo Dual Nativo en Móvil / Web en PC) */}
                   <div>
                     <button
                       type="button"
@@ -2096,8 +2121,32 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
                       <span>Compartir directo en WhatsApp</span>
                     </button>
                     <p className="mt-1 text-center text-[10px] font-medium text-slate-400">
-                      Abre WhatsApp de inmediato con el mensaje comercial y el enlace oficial.
+                      {isMobile
+                        ? 'Abre el menú nativo con la tarjeta 9:16 Ultra HD y el texto oficial con enlace directo.'
+                        : 'Abre WhatsApp Web con el mensaje oficial y enlace del producto.'}
                     </p>
+
+                    {/* Botón directo para compartir con otras apps (Móvil) */}
+                    {isMobile && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleNativeShare('guest-native-share-top', {
+                            format: 'story',
+                            text: statusText,
+                          })
+                        }
+                        disabled={busyKey === 'guest-native-share-top'}
+                        className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-[#0A6CFF] px-4 py-3 text-xs font-black text-white shadow-md shadow-blue-500/20 transition-all hover:bg-blue-700 cursor-pointer disabled:opacity-60"
+                      >
+                        {busyKey === 'guest-native-share-top' ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Smartphone className="w-4 h-4" />
+                        )}
+                        <span>Compartir con otras apps del teléfono</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* 2. Compartir a la Historia (9:16 Vertical) para cada red social */}

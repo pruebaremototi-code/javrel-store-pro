@@ -286,15 +286,7 @@ export const canShareNativeFiles = () => {
   if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
     return false;
   }
-  if (typeof navigator.canShare !== 'function') {
-    return true;
-  }
-  try {
-    const testFile = new File([''], 'test.png', { type: 'image/png' });
-    return navigator.canShare({ files: [testFile] });
-  } catch {
-    return false;
-  }
+  return true;
 };
 
 /**
@@ -313,6 +305,13 @@ export const shareNativePromoCard = async ({
     throw new Error('Web Share API no soportada en este entorno.');
   }
 
+  // Respaldo inmediato en portapapeles para evitar pérdida en cualquier transición de app
+  try {
+    if (text && typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+    }
+  } catch {}
+
   let file = null;
   if (blob) {
     try {
@@ -322,10 +321,19 @@ export const shareNativePromoCard = async ({
     }
   }
 
-  // 1) Si admite archivos, adjuntar el archivo PNG con el texto y título
-  if (file && typeof navigator.canShare === 'function') {
+  // 1) Si admite archivos (Web Share Level 2 nativo en Android/iOS), adjuntar la tarjeta HD junto al texto oficial
+  if (file) {
     try {
-      if (navigator.canShare({ files: [file] })) {
+      let canShareFiles = true;
+      if (typeof navigator.canShare === 'function') {
+        try {
+          canShareFiles = navigator.canShare({ files: [file] });
+        } catch {
+          canShareFiles = true;
+        }
+      }
+
+      if (canShareFiles) {
         return await navigator.share({
           title,
           text,
@@ -334,7 +342,7 @@ export const shareNativePromoCard = async ({
       }
     } catch (err) {
       if (err?.name === 'AbortError') throw err;
-      // Continuar al fallback si canShare falló
+      console.warn('[shareNativePromoCard] Fallback de archivo a solo texto/enlace:', err);
     }
   }
 
