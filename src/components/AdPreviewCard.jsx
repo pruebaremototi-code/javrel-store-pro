@@ -853,9 +853,11 @@ export const AdPreviewCard = ({
         ) : (
           /* Disposición Vertical para Square, Story y Portrait */
           <>
-            {/* Imagen ampliada con profundidad 3D */}
+            {/* Imagen ampliada con profundidad 3D y mayor protagonismo */}
             <div
-              className={`relative mt-3.5 flex items-center justify-center overflow-hidden rounded-3xl border p-2 sm:p-2.5 ${style.imagePanel} aspect-[3/2]`}
+              className={`relative flex items-center justify-center overflow-hidden rounded-3xl border p-2 sm:p-2.5 ${style.imagePanel} ${
+                format === 'story' ? 'mt-2.5 aspect-square w-full' : 'mt-3.5 aspect-[3/2]'
+              }`}
             >
               {/* Fondo difuminado ambiental sutil para evitar vacíos */}
               <img
@@ -871,7 +873,7 @@ export const AdPreviewCard = ({
               <img
                 src={imageUrl || '/zafra/logo-menu.webp'}
                 alt={data.name}
-                className="relative z-2 h-full w-full object-contain scale-[1.06] drop-shadow-[0_18px_22px_rgba(15,23,42,0.18)] transition-transform duration-500 group-hover:scale-[1.10]"
+                className="relative z-2 h-full w-full object-contain scale-[1.10] drop-shadow-[0_18px_22px_rgba(15,23,42,0.18)] transition-transform duration-500 group-hover:scale-[1.14]"
                 loading="lazy"
                 onError={(event) => {
                   event.currentTarget.src = '/zafra/logo-menu.webp';

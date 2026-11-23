@@ -1602,7 +1602,7 @@ const drawImageCard = (ctx, x, y, width, height, radius, image, data, palette) =
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    const zoomFactor = 1.06;
+    const zoomFactor = 1.12;
     const scale = Math.min(
       (width - padding * 2) / image.width,
       (height - padding * 2) / image.height
@@ -1918,16 +1918,17 @@ const drawSquare = (ctx, width, height, data, palette, image, logo, glassEffect 
 };
 
 const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect = true) => {
-  const pad = 64;
-  drawHeader(ctx, pad, 64, width - pad * 2, data, palette, {
+  const pad = 52;
+  drawHeader(ctx, pad, 48, width - pad * 2, data, palette, {
     mark: 64,
     store: 34,
     badge: 18,
   }, logo);
-  drawImageCard(ctx, pad, 176, width - pad * 2, 806, 56, image, data, palette);
+  // Imagen mucho más amplia y dominante en 9:16
+  drawImageCard(ctx, pad, 132, width - pad * 2, 888, 56, image, data, palette);
   
   if (glassEffect) {
-    drawGlassPanel(ctx, 44, 1012, width - 88, 782, 48, palette);
+    drawGlassPanel(ctx, 36, 1036, width - 72, 836, 48, palette);
   }
 
   // Motor Inteligente de Contraste Tipográfico de Alta Definición
@@ -1937,9 +1938,9 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
     ctx,
     data.productName,
     pad,
-    1072,
+    1096,
     width - pad * 2,
-    74,
+    72,
     3,
     `800 64px ${FONT_HEAD}`,
     palette.isDark ? '#FFFFFF' : palette.text
@@ -1950,19 +1951,19 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
     ctx,
     data.description,
     pad,
-    1312,
+    1280,
     width - pad * 2,
-    42,
+    44,
     3,
     glassEffect ? `600 34px ${FONT_BODY}` : `700 34px ${FONT_BODY}`,
     palette.isDark ? 'rgba(255,255,255,0.95)' : palette.muted
   );
   ctx.restore();
 
-  drawPriceRow(ctx, pad, 1500, data, palette, { offer: 76, regular: 32 }, glassEffect);
+  drawPriceRow(ctx, pad, 1490, data, palette, { offer: 78, regular: 34 }, glassEffect);
 
-  drawCta(ctx, pad, 1558, 520, 100, data.ctaText, palette, 34);
-  drawGuarantee(ctx, pad, 1740, data.guaranteeText, palette, 24, glassEffect);
+  drawCta(ctx, pad, 1605, 560, 110, data.ctaText, palette, 36);
+  drawGuarantee(ctx, pad, 1795, data.guaranteeText, palette, 26, glassEffect);
 };
 
 const drawLandscape = (ctx, width, height, data, palette, image, logo, glassEffect = true) => {

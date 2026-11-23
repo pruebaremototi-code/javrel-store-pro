@@ -255,10 +255,9 @@ export const ProductCard = ({
         editorActive ? 'ring-2 ring-[#0A6CFF]/40' : ''
       }`}
     >
-      {/* ── 1. Contenedor de Imagen Full-Bleed (Aspecto 4/5, sin recuadros ni bordes reductores) ── */}
+      {/* ── 1. Contenedor de Imagen Full-Bleed (Aspecto Square / 4:3 sin márgenes internos) ── */}
       <div
-        className="relative w-full overflow-hidden bg-slate-50/70 border-b border-slate-100/90"
-        style={{ aspectRatio: '4/5' }}
+        className="relative w-full aspect-square overflow-hidden bg-slate-50 border-b border-slate-100"
       >
         {/* Badges Flotantes — Top Left */}
         <div className="absolute top-2.5 left-2.5 z-20 flex flex-col gap-1 items-start pointer-events-none">
@@ -302,7 +301,7 @@ export const ProductCard = ({
             src={displayImage}
             alt={safeName}
             draggable={false}
-            className="w-full h-full object-contain p-2 sm:p-3 group-hover:scale-106 transition-transform duration-500 ease-out filter drop-shadow-xs"
+            className="w-full h-full object-cover object-center block group-hover:scale-105 transition-transform duration-500 ease-out"
             loading={priority ? 'eager' : 'lazy'}
             decoding="async"
             onError={(e) => {
@@ -311,45 +310,19 @@ export const ProductCard = ({
           />
         </button>
 
-        {/* ── Hover Detail Overlay (Desliza suavemente desde abajo en hover) ── */}
-        {!editorActive && (safeDescription || specHighlight) && (
-          <div
-            aria-hidden="true"
-            className="absolute bottom-0 left-0 right-0 z-10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out pointer-events-none"
-            style={{
-              background: 'linear-gradient(to top, rgba(11, 20, 48, 0.96) 0%, rgba(11, 20, 48, 0.88) 65%, transparent 100%)',
-              paddingTop: '32px',
-            }}
-          >
-            <div className="px-3.5 pb-3 space-y-1.5">
-              {safeDescription && (
-                <p className="text-[11px] leading-relaxed text-slate-200 line-clamp-3 font-medium">
-                  {safeDescription}
-                </p>
-              )}
-              {specHighlight && (
-                <p className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-300">
-                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 text-emerald-400" />
-                  <span className="truncate">{specHighlight}</span>
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Botón Lupa Zoom Flotante (Bottom-Right, visible en hover) */}
         <button
           type="button"
           onClick={handleOpenZoom}
           data-action="zoom-image"
-          className="absolute bottom-2 right-2 z-20 p-2 rounded-full bg-white/95 hover:bg-white text-slate-700 shadow-md border border-slate-200/90 hover:text-[#0A6CFF] hover:border-[#0A6CFF]/60 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/60"
+          className="absolute bottom-2.5 right-2.5 z-20 p-2 rounded-full bg-white/95 hover:bg-white text-slate-700 shadow-md border border-slate-200/90 hover:text-[#0A6CFF] hover:border-[#0A6CFF]/60 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/60"
           title="Ampliar imagen"
           aria-label={`Ampliar imagen de ${safeName}`}
         >
           <ZoomIn className="w-4 h-4" />
         </button>
 
-        {/* Botón Compartir Flotante (Bottom-Left) */}
+        {/* Botón Compartir Flotante (Bottom-Left sobre la imagen) */}
         <button
           type="button"
           onClick={(e) => {
@@ -358,7 +331,7 @@ export const ProductCard = ({
             setIsShareOpen(true);
           }}
           data-action="share-product"
-          className="absolute bottom-2 left-2 z-20 p-2 rounded-full bg-white/95 hover:bg-white text-slate-700 shadow-md border border-slate-200/90 hover:text-[#0A6CFF] hover:border-[#0A6CFF]/60 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200 hover:scale-110 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/60"
+          className="absolute bottom-2.5 left-2.5 z-20 p-2 rounded-full bg-white/95 hover:bg-white text-slate-700 shadow-md border border-slate-200/90 hover:text-[#0A6CFF] hover:border-[#0A6CFF]/60 opacity-95 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200 hover:scale-110 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/60"
           title="Compartir producto"
           aria-label={`Compartir ${safeName}`}
         >
@@ -393,10 +366,10 @@ export const ProductCard = ({
       </div>
 
       {/* ── 2. Contenido e Información con Escala Tipográfica Aumentada ── */}
-      <div className="p-3.5 sm:p-4 pt-2.5 flex-1 flex flex-col justify-between">
+      <div className="p-3 sm:p-4 pt-2.5 flex-1 flex flex-col justify-between">
         <div>
           {/* Marca / Categoría + Rating */}
-          <div className="flex items-center justify-between text-[11px] sm:text-xs font-mono-code uppercase font-bold mb-1.5">
+          <div className="flex items-center justify-between text-[10.5px] sm:text-xs font-mono-code uppercase font-bold mb-1">
             <span className="tracking-wider text-[#0A6CFF] min-w-0 truncate">
               <EditableText
                 field="brand"
@@ -407,18 +380,18 @@ export const ProductCard = ({
               />
             </span>
             <div className="flex items-center gap-1 text-amber-500 shrink-0">
-              <Star className="w-3 h-3 fill-amber-500" />
-              <span className="font-bold text-slate-700 text-[11px]">
+              <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-amber-500" />
+              <span className="font-bold text-slate-700 text-[10.5px]">
                 {product.rating || '5.0'}
               </span>
               {product.reviews && (
-                <span className="text-slate-400 text-[10px]">({product.reviews})</span>
+                <span className="text-slate-400 text-[9.5px]">({product.reviews})</span>
               )}
             </div>
           </div>
 
           {/* Título de Producto */}
-          <h3 className="font-sans font-bold text-sm sm:text-[15px] xl:text-base text-slate-900 line-clamp-2 leading-snug mb-2 tracking-tight">
+          <h3 className="font-sans font-bold text-xs sm:text-[14px] xl:text-[15px] text-slate-900 line-clamp-2 leading-snug mb-1.5 tracking-tight">
             <EditableText
               field="name"
               value={isUuid(product.name) ? '' : product.name}
@@ -429,40 +402,42 @@ export const ProductCard = ({
             />
           </h3>
 
-          {/* Modo Editor: Visibilidad fija de descripción y especificación técnica */}
-          {editorActive && (
-            <div className="mb-2 space-y-1.5">
-              <p className="text-[11px] text-slate-600 line-clamp-3">
-                <EditableText
-                  field="description"
-                  value={safeDescription || ''}
-                  onChange={(val) => updateField('description', val)}
-                  isAdmin={isAdmin}
-                  as="span"
-                  multiline
-                  placeholder="Haz clic para añadir una descripción..."
-                />
-              </p>
-              <p className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
-                <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-                <EditableText
-                  field="spec"
-                  value={specHighlight || ''}
-                  onChange={handleSpecChange}
-                  isAdmin={isAdmin}
-                  as="span"
-                  className="truncate min-w-0"
-                  placeholder="Haz clic para añadir etiqueta técnica..."
-                />
-              </p>
-            </div>
+          {/* Descripción Corta: Siempre visible con 2 líneas claras */}
+          {(safeDescription || editorActive) && (
+            <p className="text-[10px] sm:text-[11px] xl:text-[12px] leading-relaxed text-slate-500 line-clamp-2 focus-within:line-clamp-none mb-1.5 font-medium">
+              <EditableText
+                field="description"
+                value={safeDescription || ''}
+                onChange={(val) => updateField('description', val)}
+                isAdmin={isAdmin}
+                as="span"
+                multiline
+                placeholder="Haz clic para añadir una descripción..."
+              />
+            </p>
+          )}
+
+          {/* Característica Destacada con Ícono (COMPATIBILIDAD, ALMACENAMIENTO, EDICIÓN, etc.) */}
+          {(specHighlight || editorActive) && (
+            <p className="flex items-center gap-1 text-[9.5px] sm:text-[10.5px] text-emerald-600 font-semibold mb-2 line-clamp-1 focus-within:line-clamp-none">
+              <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0 text-emerald-500" />
+              <EditableText
+                field="spec"
+                value={specHighlight || ''}
+                onChange={handleSpecChange}
+                isAdmin={isAdmin}
+                as="span"
+                className="truncate min-w-0 font-mono-code uppercase"
+                placeholder="Haz clic para añadir etiqueta técnica..."
+              />
+            </p>
           )}
         </div>
 
         {/* ── 3. Precios y Botones de Acción Ergonómicos ── */}
-        <div className="pt-2.5 border-t border-slate-100">
+        <div className="pt-2 border-t border-slate-100">
           {editorActive ? (
-            <div className="flex flex-col gap-1.5 mb-2.5" data-price-editor="true">
+            <div className="flex flex-col gap-1.5 mb-2" data-price-editor="true">
               <EditablePrice
                 label="Precio Regular"
                 value={product.originalPrice}
@@ -483,9 +458,9 @@ export const ProductCard = ({
               </p>
             </div>
           ) : (
-            <div className="flex items-baseline gap-2 mb-2.5 flex-wrap">
+            <div className="flex items-baseline gap-1.5 mb-2 flex-wrap">
               <span
-                className="font-display font-black text-lg sm:text-xl xl:text-2xl text-slate-900 tracking-tight"
+                className="font-display font-black text-base sm:text-lg xl:text-xl text-slate-900 tracking-tight"
                 title={hasOfferPrice ? 'Precio de oferta' : 'Precio regular'}
                 aria-label={`${hasOfferPrice ? 'Precio de oferta' : 'Precio regular'}: ${formatCurrency(effectivePrice)}`}
               >
@@ -494,7 +469,7 @@ export const ProductCard = ({
 
               {hasOfferPrice && (
                 <span
-                  className="text-xs sm:text-sm text-slate-400 line-through decoration-slate-300 font-semibold"
+                  className="text-[11px] sm:text-xs text-slate-400 line-through decoration-slate-300 font-semibold"
                   title="Precio regular"
                   aria-label={`Precio regular: ${formatCurrency(originalDisplayPrice)}`}
                 >
@@ -504,37 +479,37 @@ export const ProductCard = ({
             </div>
           )}
 
-          {/* Fila de Botones: [Al Carrito] (Principal) + [Ojo/QuickView] + [WhatsApp] */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Fila de Botones: [Agregar] (Principal) + [Ojo/QuickView] + [WhatsApp] */}
+          <div className="flex items-center gap-1 sm:gap-1.5">
             <button
               type="button"
               onClick={() => onAddToCart({ ...product, price: effectivePrice })}
-              className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 min-h-[44px] py-2 px-3 rounded-xl text-xs sm:text-[13px] font-bold text-white bg-gradient-to-r from-[#0A6CFF] to-[#0052FF] hover:from-[#0052FF] hover:to-[#0040cc] active:scale-95 shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+              className="flex-1 min-w-0 inline-flex items-center justify-center gap-1 min-h-[38px] sm:min-h-[42px] py-1.5 px-2 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold text-white bg-gradient-to-r from-[#0A6CFF] to-[#0052FF] hover:from-[#0052FF] hover:to-[#0040cc] active:scale-95 shadow-md shadow-blue-500/20 transition-all cursor-pointer touch-manipulation"
               title="Añadir al Carrito"
             >
-              <ShoppingBag className="w-4 h-4 shrink-0" />
-              <span className="truncate">Al Carrito</span>
+              <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Agregar</span>
             </button>
 
             <button
               type="button"
               onClick={handleOpenDetailModal}
-              className="inline-flex shrink-0 items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-blue-50/70 border border-blue-200/80 text-[#0A6CFF] hover:bg-blue-100 hover:border-blue-400 active:scale-95 transition-all cursor-pointer"
+              className="inline-flex shrink-0 items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-50/80 border border-blue-200/80 text-[#0A6CFF] hover:bg-blue-100 hover:border-blue-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
               title="Vista rápida del producto"
               aria-label={`Ver detalles de ${safeName}`}
             >
-              <Eye className="w-4 h-4" />
+              <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
 
             <a
               href={whatsappUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex shrink-0 items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-400 active:scale-95 shadow-xs transition-all cursor-pointer"
+              className="inline-flex shrink-0 items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-400 active:scale-95 shadow-2xs transition-all cursor-pointer touch-manipulation"
               title="Consultar por WhatsApp"
               aria-label={`Consultar ${safeName} por WhatsApp`}
             >
-              <MessageCircle className="w-4 h-4" />
+              <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </a>
           </div>
         </div>
