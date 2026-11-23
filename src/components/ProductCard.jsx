@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   MessageCircle,
   Star,
@@ -9,6 +9,7 @@ import {
   Share2,
   Images,
   Sparkles,
+  Eye,
 } from 'lucide-react';
 import { formatCurrency, buildWhatsAppUrl } from '../services/storeService';
 import { cleanBrand, sanitizeCommercialText, resolveCategoryLabel, isUuid, formatDisplayReference } from '../services/textUtils';
@@ -23,19 +24,22 @@ const SocialShareModal = React.lazy(() =>
 );
 
 /**
- * Tarjeta de producto con edición in-situ estilo Wix / Elementor.
+ * ProductCard — Tarjeta de Producto Tecnológica Premium JavrelStore.
  *
- * Contrato de eventos:
- * - El clic sobre título, marca, descripción, etiquetas o precios SOLO edita.
- * - El clic sobre la fotografía principal abre el modal de detalle completo.
- * - La lupa de la esquina abre el lightbox/zoom sin abrir el detalle.
- * - El texto nunca dispara la apertura del modal.
+ * Características:
+ * - Diseño Full-Bleed 4/5 sin recuadros ni márgenes internos que reduzcan la fotografía.
+ * - Efecto de iluminación perimetral y elevación dinámica (.javrel-card-luxury).
+ * - Overlay deslizante en hover (información técnica y descripción emergente).
+ * - Botones de acción ergonómicos: "Al Carrito", "Vista rápida" (Eye) y "WhatsApp".
+ * - Botones flotantes en hover: Zoom/Lupa y Compartir.
+ * - Edición in-situ estilo Wix/Elementor protegida por RBAC.
  */
 export const ProductCard = ({
   product,
   config = {},
   categories = [],
   isAdmin,
+  priority = false,
   onQuickView,
   onAddToCart,
   onOpenLightbox,
@@ -48,9 +52,11 @@ export const ProductCard = ({
     hasPermission,
   } = useVisualEditor();
 
-  const [isShareOpen, setIsShareOpen] = React.useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [activeVariant, setActiveVariant] = useState(null);
 
   if (!product) return null;
+
   const editorActive = Boolean(
     (isAdmin || contextIsAdmin) &&
       isEditorModeActive &&
@@ -58,7 +64,17 @@ export const ProductCard = ({
   );
   const canManageProducts = Boolean(hasPermission?.(PERMISSIONS.MANAGE_PRODUCTS));
 
-  // Campaña Promocional Activa (Black Friday, Aniversario, San Valentín)
+  // Variantes / colores si existen
+  const variants = Array.isArray(product.variants)
+    ? product.variants
+    : Array.isArray(product.colors)
+    ? product.colors
+    : [];
+
+  const displayImage = activeVariant?.image_url || activeVariant?.image || product.image || product.image_url;
+  const displayPrice = activeVariant?.price || product.price;
+
+  // Campaña Promocional Activa (Black Friday, Aniversario, Cyber, etc.)
   const campaign = config?.activeCampaign;
   const isCampaignActive =
     campaign?.enabled &&
@@ -66,22 +82,21 @@ export const ProductCard = ({
       campaign.targetCategory === 'all' ||
       campaign.targetCategory === product.category);
 
-  // Si el comerciante ya configuró un precio regular y precio de oferta explícitos,
-  // se respeta íntegramente su definición manual sin doble descuento involuntario.
+  // Comprobación de oferta personalizada
   const hasCustomOffer = Boolean(
-    product.originalPrice && Number(product.originalPrice) > Number(product.price)
+    product.originalPrice && Number(product.originalPrice) > Number(displayPrice)
   );
 
-  // Precio efectivo: aplica campaña estacional solo si el producto no tiene oferta manual explícita
+  // Precio efectivo aplicando campaña o valor directo
   const effectivePrice =
     isCampaignActive && campaign?.discountPercent && !hasCustomOffer
-      ? Math.round(product.price * (1 - campaign.discountPercent / 100))
-      : product.price;
+      ? Math.round(displayPrice * (1 - campaign.discountPercent / 100))
+      : displayPrice;
 
   const originalDisplayPrice = hasCustomOffer
     ? product.originalPrice
     : isCampaignActive && campaign?.discountPercent
-    ? product.price
+    ? displayPrice
     : product.originalPrice;
 
   const discountPercent =
@@ -89,12 +104,11 @@ export const ProductCard = ({
       ? Math.round(((originalDisplayPrice - effectivePrice) / originalDisplayPrice) * 100)
       : null;
 
-  // Hay oferta real solo cuando el precio regular supera al precio de venta.
   const hasOfferPrice = Boolean(
     originalDisplayPrice && originalDisplayPrice > effectivePrice
   );
 
-  // Función extractora que formatea cualquier spec a string legible, evitando [object Object]
+  // Función extractora de especificaciones técnicas limpias
   const parseSpecText = (spec) => {
     if (!spec) return '';
     if (typeof spec === 'string') {
@@ -119,7 +133,7 @@ export const ProductCard = ({
     return '';
   };
 
-  // Primer spec descriptivo como highlight en la tarjeta (limpio de [object Object])
+  // Primer spec descriptivo como highlight en la tarjeta
   const specHighlight = React.useMemo(() => {
     if (!Array.isArray(product.specs) || product.specs.length === 0) return null;
     for (const s of product.specs) {
@@ -132,8 +146,7 @@ export const ProductCard = ({
     return null;
   }, [product.specs]);
 
-  // Texto comercial limpio: sin UUID, modelos de IA, dimensiones WebP ni
-  // referencias internas que confundan al comprador.
+  // Textos comerciales limpios y estandarizados
   const safeBrand =
     cleanBrand(product.brand) ||
     resolveCategoryLabel(categories, product.categoryName || product.category) ||
@@ -147,16 +160,13 @@ export const ProductCard = ({
       ? rawBadge
       : null;
 
-  // Nombre visible: nunca mostrar un UUID crudo si el título viene vacío.
   const safeName =
     product.name && !isUuid(product.name)
       ? String(product.name).trim()
       : 'Producto destacado';
 
-  // Referencia pública: estandarizada limpia (cero UUIDs en WhatsApp)
   const publicReference = formatDisplayReference(product.reference, product.name, product.category, product.id);
 
-  // Enlace directo a WhatsApp estructurado
   const whatsappMsg = `¡Hola ${config?.storeName || 'JavrelStore'}! Estoy interesado en comprar: *${safeName}*${
     publicReference ? ` (Ref: ${publicReference})` : ''
   } por valor de *${formatCurrency(effectivePrice)}*. ¿Tienen unidades disponibles para envío inmediato?`;
@@ -191,110 +201,79 @@ export const ProductCard = ({
   const handleSpecChange = (newValue) => {
     const specs = Array.isArray(product.specs) ? [...product.specs] : [];
     const cleanValue = String(newValue || '').trim();
-
     if (cleanValue) {
       specs[0] = cleanValue;
     } else {
       specs.splice(0, 1);
     }
-
     updateField('specs', specs);
+  };
+
+  const renderBadge = () => {
+    if (isCampaignActive && campaign?.badge) {
+      return (
+        <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 text-white border border-red-400 shadow-md shadow-red-500/30 animate-pulse">
+          {campaign.badge}
+        </span>
+      );
+    }
+    if (discountPercent && !isCampaignActive) {
+      return (
+        <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-[#0A6CFF] text-white shadow-sm">
+          -{discountPercent}%
+        </span>
+      );
+    }
+    if (product.condition && product.condition !== 'Nuevo') {
+      return (
+        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-900/80 text-white backdrop-blur-xs border border-white/20">
+          ● {product.condition}
+        </span>
+      );
+    }
+    if (safeBadge) {
+      return (
+        <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-white/95 text-slate-800 border border-slate-200/90 shadow-sm backdrop-blur-xs">
+          <EditableText
+            field="badge"
+            value={safeBadge}
+            onChange={(val) => updateField('badge', val)}
+            isAdmin={isAdmin}
+            as="span"
+          />
+        </span>
+      );
+    }
+    return null;
   };
 
   return (
     <div
       data-product-card={product.id}
       data-editor-mode={editorActive ? 'true' : 'false'}
-      className={`group relative flex flex-col bg-white rounded-2xl border border-slate-200/90 hover:border-[#0A6CFF]/40 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden transform-gpu hover:-translate-y-1 ${
-        editorActive ? 'ring-1 ring-[#0A6CFF]/20' : ''
+      className={`group relative flex flex-col javrel-card-luxury w-full max-w-full min-w-0 box-border rounded-2xl overflow-hidden transition-all duration-300 transform-gpu hover:-translate-y-1 ${
+        editorActive ? 'ring-2 ring-[#0A6CFF]/40' : ''
       }`}
     >
-      {/* Contenedor de Imagen — sin clic a modal; solo botones explícitos */}
-      <div className="relative m-2.5 rounded-xl bg-slate-50/90 aspect-square p-3 sm:p-4 xl:p-5 flex items-center justify-center overflow-hidden border border-slate-100/90 group-hover:bg-slate-100/70 transition-colors">
-        {/* ── Badges — máximo 2 simultáneos, jerarquía comercial estricta ── */}
-        <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1 items-start">
-          {(() => {
-            const slots = [];
-
-            // 1. Campaña estacional (máxima prioridad)
-            if (isCampaignActive && campaign?.badge) {
-              slots.push(
-                <span
-                  key="campaign"
-                  className="px-2.5 py-0.5 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 text-white border border-red-400 shadow-md shadow-red-500/30 animate-pulse"
-                >
-                  {campaign.badge}
-                </span>
-              );
-            }
-
-            // 2. Descuento % (solo si no hay badge de campaña ya visible)
-            if (discountPercent && !isCampaignActive) {
-              slots.push(
-                <span
-                  key="discount"
-                  className="px-1.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black bg-[#0A6CFF] text-white shadow-xs"
-                >
-                  -{discountPercent}%
-                </span>
-              );
-            }
-
-            // 3. Condición física (Seminuevo, Usado, Poco Uso) — siempre discreta, ocupa el slot 2 si queda espacio
-            if (product.condition && product.condition !== 'Nuevo' && slots.length < 2) {
-              slots.push(
-                <span
-                  key="condition"
-                  className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-wider shadow-2xs ${
-                    product.condition === 'Seminuevo'
-                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                      : 'bg-slate-200 text-slate-800 border border-slate-300'
-                  }`}
-                >
-                  ● {product.condition}
-                </span>
-              );
-            }
-
-            // 4. Badge comercial libre (solo si no hay nada activo aún y queda espacio)
-            if (safeBadge && !isCampaignActive && !discountPercent && slots.length < 2) {
-              slots.push(
-                <span
-                  key="badge"
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-wider shadow-[0_1px_3px_rgba(0,0,0,0.12)] backdrop-blur-xs ${
-                    /black\s*friday/i.test(safeBadge)
-                      ? 'bg-black text-amber-300 border border-amber-400/60 shadow-sm animate-pulse'
-                      : /oferta/i.test(safeBadge)
-                        ? 'bg-rose-600 text-white border border-rose-500'
-                        : /destacado/i.test(safeBadge)
-                          ? 'bg-blue-600 text-white border border-blue-500'
-                          : 'text-slate-800 bg-gradient-to-b from-white via-slate-100 to-slate-200 border border-slate-300'
-                  }`}
-                >
-                  <EditableText
-                    field="badge"
-                    value={safeBadge}
-                    onChange={(val) => updateField('badge', val)}
-                    isAdmin={isAdmin}
-                    as="span"
-                  />
-                </span>
-              );
-            }
-
-            return slots;
-          })()}
+      {/* ── 1. Contenedor de Imagen Full-Bleed (Aspecto 4/5, sin recuadros ni bordes reductores) ── */}
+      <div
+        className="relative w-full overflow-hidden bg-slate-50/70 border-b border-slate-100/90"
+        style={{ aspectRatio: '4/5' }}
+      >
+        {/* Badges Flotantes — Top Left */}
+        <div className="absolute top-2.5 left-2.5 z-20 flex flex-col gap-1 items-start pointer-events-none">
+          {renderBadge()}
         </div>
 
         {/* Indicador de galería multi-foto */}
         {Array.isArray(product.images) && product.images.length > 1 && (
-          <span className="absolute bottom-2.5 left-2.5 z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[9px] font-bold backdrop-blur-sm pointer-events-none">
+          <span className="absolute top-2.5 right-2.5 z-20 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-900/75 text-white text-[9px] font-bold backdrop-blur-xs pointer-events-none shadow-sm">
             <Images className="w-3 h-3" />
             {product.images.length}
           </span>
         )}
 
-        {/* Botón cambiar foto si tiene permiso de catálogo */}
+        {/* Administrador: Botón para cambiar foto */}
         {canManageProducts && (
           <button
             type="button"
@@ -302,7 +281,7 @@ export const ProductCard = ({
               e.stopPropagation();
               if (onOpenImagePicker) onOpenImagePicker(product);
             }}
-            className="absolute top-2.5 right-2.5 z-20 p-1.5 sm:p-2 rounded-xl bg-[#0A6CFF] text-white shadow-md hover:bg-blue-600 transition-all hover:scale-105 flex items-center gap-1 text-[10px] font-bold"
+            className="absolute top-2.5 right-2.5 z-30 p-1.5 sm:p-2 rounded-xl bg-[#0A6CFF] text-white shadow-md hover:bg-blue-600 transition-all hover:scale-105 flex items-center gap-1 text-[10px] font-bold cursor-pointer"
             title="Cambiar imagen"
           >
             <Camera className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
@@ -310,65 +289,115 @@ export const ProductCard = ({
           </button>
         )}
 
-        {/* Imagen de Producto — clic abre la ficha completa; la lupa abre el zoom */}
-        <div className="relative w-full h-full flex items-center justify-center select-none">
-          <button
-            type="button"
-            onClick={handleOpenDetailModal}
-            data-action="view-detail"
-            className="w-full h-full flex items-center justify-center bg-transparent p-0 border-0 cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/60 focus-visible:ring-offset-2"
-            title="Ver ficha técnica y detalles del producto"
-            aria-label={`Ver detalle de ${safeName}`}
-          >
-            <img
-              src={product.image}
-              alt={safeName}
-              draggable={false}
-              className="w-full h-full object-contain filter drop-shadow-sm group-hover:scale-106 transition-transform duration-500 ease-out"
-              loading="lazy"
-              decoding="async"
-              onError={(e) => {
-                e.target.src = '/zafra/logo-menu.webp';
-              }}
-            />
-          </button>
-
-          {/* Único control flotante: lupa para ampliar la fotografía */}
-          <button
-            type="button"
-            onClick={handleOpenZoom}
-            data-action="zoom-image"
-            className="absolute bottom-1 right-1 z-20 p-2 rounded-full bg-white/95 hover:bg-white text-slate-600 shadow-md border border-slate-200/90 hover:text-[#0A6CFF] transition-all hover:scale-110 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/60"
-            title="Ampliar imagen"
-            aria-label={`Ampliar imagen de ${safeName}`}
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-
-          {/* Centro de difusión: WhatsApp, Facebook y TikTok */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsShareOpen(true);
+        {/* Imagen Principal Full-Bleed con Click a Detalle */}
+        <button
+          type="button"
+          onClick={handleOpenDetailModal}
+          data-action="view-detail"
+          className="w-full h-full block p-0 border-0 cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/60"
+          title="Ver ficha técnica y detalles del producto"
+          aria-label={`Ver detalle de ${safeName}`}
+        >
+          <img
+            src={displayImage}
+            alt={safeName}
+            draggable={false}
+            className="w-full h-full object-contain p-2 sm:p-3 group-hover:scale-106 transition-transform duration-500 ease-out filter drop-shadow-xs"
+            loading={priority ? 'eager' : 'lazy'}
+            decoding="async"
+            onError={(e) => {
+              e.target.src = '/zafra/logo-menu.webp';
             }}
-            data-action="share-product"
-            className="absolute bottom-1 left-1 z-20 p-2 rounded-full bg-white/95 hover:bg-white text-slate-600 shadow-md border border-slate-200/90 hover:text-[#0A6CFF] transition-all hover:scale-110 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/60"
-            title="Compartir producto"
-            aria-label={`Compartir ${safeName}`}
+          />
+        </button>
+
+        {/* ── Hover Detail Overlay (Desliza suavemente desde abajo en hover) ── */}
+        {!editorActive && (safeDescription || specHighlight) && (
+          <div
+            aria-hidden="true"
+            className="absolute bottom-0 left-0 right-0 z-10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out pointer-events-none"
+            style={{
+              background: 'linear-gradient(to top, rgba(11, 20, 48, 0.96) 0%, rgba(11, 20, 48, 0.88) 65%, transparent 100%)',
+              paddingTop: '32px',
+            }}
           >
-            <Share2 className="w-4 h-4" />
-          </button>
-        </div>
+            <div className="px-3.5 pb-3 space-y-1.5">
+              {safeDescription && (
+                <p className="text-[11px] leading-relaxed text-slate-200 line-clamp-3 font-medium">
+                  {safeDescription}
+                </p>
+              )}
+              {specHighlight && (
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-300">
+                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 text-emerald-400" />
+                  <span className="truncate">{specHighlight}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Botón Lupa Zoom Flotante (Bottom-Right, visible en hover) */}
+        <button
+          type="button"
+          onClick={handleOpenZoom}
+          data-action="zoom-image"
+          className="absolute bottom-2 right-2 z-20 p-2 rounded-full bg-white/95 hover:bg-white text-slate-700 shadow-md border border-slate-200/90 hover:text-[#0A6CFF] hover:border-[#0A6CFF]/60 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-110 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/60"
+          title="Ampliar imagen"
+          aria-label={`Ampliar imagen de ${safeName}`}
+        >
+          <ZoomIn className="w-4 h-4" />
+        </button>
+
+        {/* Botón Compartir Flotante (Bottom-Left) */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsShareOpen(true);
+          }}
+          data-action="share-product"
+          className="absolute bottom-2 left-2 z-20 p-2 rounded-full bg-white/95 hover:bg-white text-slate-700 shadow-md border border-slate-200/90 hover:text-[#0A6CFF] hover:border-[#0A6CFF]/60 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200 hover:scale-110 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A6CFF]/60"
+          title="Compartir producto"
+          aria-label={`Compartir ${safeName}`}
+        >
+          <Share2 className="w-4 h-4" />
+        </button>
+
+        {/* Variantes de Color / Swatches (si existen) */}
+        {variants.length > 1 && (
+          <div className="absolute bottom-11 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 px-2 py-1 rounded-full bg-white/90 border border-slate-200 shadow-xs backdrop-blur-xs">
+            {variants.slice(0, 4).map((v, idx) => {
+              const isActive = activeVariant === v;
+              const color = v.color || v.hex || v.value || '#0A6CFF';
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveVariant(isActive ? null : v);
+                  }}
+                  title={v.name || v.label || color}
+                  className="w-4 h-4 rounded-full border-2 transition-transform hover:scale-110"
+                  style={{
+                    backgroundColor: color,
+                    borderColor: isActive ? '#0A6CFF' : 'transparent',
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Contenido e Información — Tipografía Oscura y Alta Legibilidad */}
-      <div className="p-3.5 sm:p-4 pt-1 sm:pt-2 flex-1 flex flex-col justify-between">
+      {/* ── 2. Contenido e Información con Escala Tipográfica Aumentada ── */}
+      <div className="p-3.5 sm:p-4 pt-2.5 flex-1 flex flex-col justify-between">
         <div>
-          {/* Marca / Badge Platino + Rating */}
-          <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-mono-code uppercase font-bold mb-1.5">
-            <span className="tracking-wider text-slate-500 min-w-0">
+          {/* Marca / Categoría + Rating */}
+          <div className="flex items-center justify-between text-[11px] sm:text-xs font-mono-code uppercase font-bold mb-1.5">
+            <span className="tracking-wider text-[#0A6CFF] min-w-0 truncate">
               <EditableText
                 field="brand"
                 value={safeBrand}
@@ -378,18 +407,18 @@ export const ProductCard = ({
               />
             </span>
             <div className="flex items-center gap-1 text-amber-500 shrink-0">
-              <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-amber-500" />
-              <span className="font-bold text-slate-700 text-[10px]">
+              <Star className="w-3 h-3 fill-amber-500" />
+              <span className="font-bold text-slate-700 text-[11px]">
                 {product.rating || '5.0'}
               </span>
               {product.reviews && (
-                <span className="text-slate-400 text-[9px]">({product.reviews})</span>
+                <span className="text-slate-400 text-[10px]">({product.reviews})</span>
               )}
             </div>
           </div>
 
-          {/* Título de Producto — SOLO edición in-situ, nunca abre modal */}
-          <h3 className="font-display font-semibold text-xs sm:text-sm xl:text-[15px] 2xl:text-base text-slate-900 line-clamp-2 focus-within:line-clamp-none transition-colors mb-1.5 leading-snug">
+          {/* Título de Producto */}
+          <h3 className="font-sans font-bold text-sm sm:text-[15px] xl:text-base text-slate-900 line-clamp-2 leading-snug mb-2 tracking-tight">
             <EditableText
               field="name"
               value={isUuid(product.name) ? '' : product.name}
@@ -400,39 +429,37 @@ export const ProductCard = ({
             />
           </h3>
 
-          {/* Descripción corta editable in-situ */}
-          {(safeDescription || editorActive) && (
-            <p className="text-[10px] xl:text-[11px] leading-relaxed text-slate-500 line-clamp-2 focus-within:line-clamp-none mb-2">
-              <EditableText
-                field="description"
-                value={safeDescription || ''}
-                onChange={(val) => updateField('description', val)}
-                isAdmin={isAdmin}
-                as="span"
-                multiline
-                placeholder="Haz clic para añadir una descripción..."
-              />
-            </p>
-          )}
-
-          {/* Etiqueta / primera especificación editable in-situ */}
-          {(specHighlight || editorActive) && (
-            <p className="flex items-center gap-1 text-[10px] text-emerald-600 font-medium mb-2 line-clamp-1 focus-within:line-clamp-none">
-              <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
-              <EditableText
-                field="spec"
-                value={specHighlight || ''}
-                onChange={handleSpecChange}
-                isAdmin={isAdmin}
-                as="span"
-                className="truncate min-w-0"
-                placeholder="Haz clic para añadir una etiqueta técnica..."
-              />
-            </p>
+          {/* Modo Editor: Visibilidad fija de descripción y especificación técnica */}
+          {editorActive && (
+            <div className="mb-2 space-y-1.5">
+              <p className="text-[11px] text-slate-600 line-clamp-3">
+                <EditableText
+                  field="description"
+                  value={safeDescription || ''}
+                  onChange={(val) => updateField('description', val)}
+                  isAdmin={isAdmin}
+                  as="span"
+                  multiline
+                  placeholder="Haz clic para añadir una descripción..."
+                />
+              </p>
+              <p className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                <EditableText
+                  field="spec"
+                  value={specHighlight || ''}
+                  onChange={handleSpecChange}
+                  isAdmin={isAdmin}
+                  as="span"
+                  className="truncate min-w-0"
+                  placeholder="Haz clic para añadir etiqueta técnica..."
+                />
+              </p>
+            </div>
           )}
         </div>
 
-        {/* Precios y Botones de Acción Limpios ("Al Carrito" / "WhatsApp") */}
+        {/* ── 3. Precios y Botones de Acción Ergonómicos ── */}
         <div className="pt-2.5 border-t border-slate-100">
           {editorActive ? (
             <div className="flex flex-col gap-1.5 mb-2.5" data-price-editor="true">
@@ -456,9 +483,9 @@ export const ProductCard = ({
               </p>
             </div>
           ) : (
-            <div className="flex items-baseline gap-1.5 mb-2.5 flex-wrap">
+            <div className="flex items-baseline gap-2 mb-2.5 flex-wrap">
               <span
-                className="font-display font-black text-base sm:text-lg xl:text-xl text-slate-900 tracking-tight"
+                className="font-display font-black text-lg sm:text-xl xl:text-2xl text-slate-900 tracking-tight"
                 title={hasOfferPrice ? 'Precio de oferta' : 'Precio regular'}
                 aria-label={`${hasOfferPrice ? 'Precio de oferta' : 'Precio regular'}: ${formatCurrency(effectivePrice)}`}
               >
@@ -467,7 +494,7 @@ export const ProductCard = ({
 
               {hasOfferPrice && (
                 <span
-                  className="text-[10px] sm:text-xs text-slate-400 line-through decoration-slate-300"
+                  className="text-xs sm:text-sm text-slate-400 line-through decoration-slate-300 font-semibold"
                   title="Precio regular"
                   aria-label={`Precio regular: ${formatCurrency(originalDisplayPrice)}`}
                 >
@@ -477,32 +504,43 @@ export const ProductCard = ({
             </div>
           )}
 
-          {/* Botones institucionales: Al Carrito + WhatsApp */}
+          {/* Fila de Botones: [Al Carrito] (Principal) + [Ojo/QuickView] + [WhatsApp] */}
           <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => onAddToCart({ ...product, price: effectivePrice })}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-[11px] sm:text-xs xl:text-[13px] font-bold text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 active:scale-95 transition-all cursor-pointer"
+              className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 min-h-[44px] py-2 px-3 rounded-xl text-xs sm:text-[13px] font-bold text-white bg-gradient-to-r from-[#0A6CFF] to-[#0052FF] hover:from-[#0052FF] hover:to-[#0040cc] active:scale-95 shadow-md shadow-blue-500/20 transition-all cursor-pointer"
               title="Añadir al Carrito"
             >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Al Carrito</span>
+              <ShoppingBag className="w-4 h-4 shrink-0" />
+              <span className="truncate">Al Carrito</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenDetailModal}
+              className="inline-flex shrink-0 items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-blue-50/70 border border-blue-200/80 text-[#0A6CFF] hover:bg-blue-100 hover:border-blue-400 active:scale-95 transition-all cursor-pointer"
+              title="Vista rápida del producto"
+              aria-label={`Ver detalles de ${safeName}`}
+            >
+              <Eye className="w-4 h-4" />
             </button>
 
             <a
               href={whatsappUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-[11px] sm:text-xs xl:text-[13px] font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-sm shadow-blue-500/20 transition-all cursor-pointer"
+              className="inline-flex shrink-0 items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-400 active:scale-95 shadow-xs transition-all cursor-pointer"
               title="Consultar por WhatsApp"
+              aria-label={`Consultar ${safeName} por WhatsApp`}
             >
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span>WhatsApp</span>
+              <MessageCircle className="w-4 h-4" />
             </a>
           </div>
         </div>
       </div>
 
+      {/* Centro de Difusión */}
       {isShareOpen && (
         <React.Suspense fallback={null}>
           <SocialShareModal

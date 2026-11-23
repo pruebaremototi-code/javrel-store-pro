@@ -178,6 +178,9 @@ export function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('featured'); // 'featured', 'price-asc', 'price-desc', 'name'
   const [gridDensity, setGridDensity] = useState(readStoredDensity);
+  const [filterType, setFilterType] = useState('all'); // 'all', 'ofertas', 'nuevos', 'destacados'
+  const [filterPriceMax, setFilterPriceMax] = useState(2000000);
+  const [filterInStockOnly, setFilterInStockOnly] = useState(false);
 
   // Estados de Modales y Experiencia E-commerce
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -941,10 +944,34 @@ export function App() {
     showToast(`¡Bienvenido, ${roleText}! Permisos cargados correctamente.`);
   };
 
+  // Cálculo dinámico del precio máximo del catálogo
+  const maxAvailablePrice = useMemo(() => {
+    if (!Array.isArray(products) || products.length === 0) return 2000000;
+    const maxVal = Math.max(...products.map((p) => Number(p.price) || 0));
+    return Math.max(500000, Math.ceil(maxVal / 100000) * 100000);
+  }, [products]);
+
+  // Sincronizar el tope del slider de precios con el catálogo cargado
+  useEffect(() => {
+    if (maxAvailablePrice > 0) {
+      setFilterPriceMax(maxAvailablePrice);
+    }
+  }, [maxAvailablePrice]);
+
+  const handleResetFilters = useCallback(() => {
+    setActiveCategory('all');
+    setFilterType('all');
+    setFilterPriceMax(maxAvailablePrice);
+    setFilterInStockOnly(false);
+    setSearchTerm('');
+    setSortBy('featured');
+  }, [maxAvailablePrice]);
+
   // Filtrado y Ordenamiento (100% tolerante a datos nulos o incompletos)
   const filteredProducts = useMemo(() => {
     let result = (Array.isArray(products) ? products : []).filter(Boolean);
 
+    // Filtro por categoría
     if (activeCategory !== 'all') {
       const targetCat = normalizeSearchText(activeCategory);
       result = result.filter((p) => {
@@ -965,6 +992,42 @@ export function App() {
       });
     }
 
+    // Filtro por Tipo / Gama
+    if (filterType !== 'all') {
+      if (filterType === 'ofertas') {
+        result = result.filter(
+          (p) =>
+            Number(p.originalPrice) > Number(p.price) ||
+            /oferta/i.test(p.badge || p.commercialTag || '')
+        );
+      } else if (filterType === 'nuevos') {
+        result = result.filter(
+          (p) =>
+            p.condition === 'Nuevo' ||
+            /nuevo|new/i.test(p.badge || p.commercialTag || '')
+        );
+      } else if (filterType === 'destacados') {
+        result = result.filter(
+          (p) =>
+            Boolean(p.featured) ||
+            /destacado|top|exclusiv/i.test(p.badge || p.commercialTag || '')
+        );
+      }
+    }
+
+    // Filtro por Precio Máximo
+    if (filterPriceMax && filterPriceMax < maxAvailablePrice) {
+      result = result.filter((p) => (Number(p.price) || 0) <= filterPriceMax);
+    }
+
+    // Filtro por Stock Inmediato
+    if (filterInStockOnly) {
+      result = result.filter(
+        (p) => p.stock === undefined || p.stock === null || Number(p.stock) > 0
+      );
+    }
+
+    // Filtro por Búsqueda de Texto
     const term = normalizeSearchText(searchTerm);
     if (term) {
       const keywords = term.split(/\s+/).filter(Boolean);
@@ -997,7 +1060,7 @@ export function App() {
     }
 
     return result;
-  }, [products, activeCategory, searchTerm, sortBy]);
+  }, [products, activeCategory, filterType, filterPriceMax, maxAvailablePrice, filterInStockOnly, searchTerm, sortBy]);
 
   // Etiqueta legible del filtro activo (nunca mostrar un UUID crudo al usuario).
   const activeCategoryLabel = useMemo(() => {
@@ -1030,8 +1093,17 @@ export function App() {
     }
   };
 
-  const densityCols =
-    (DENSITY_OPTIONS.find((option) => option.id === gridDensity) || DENSITY_OPTIONS[0]).cols;
+  const densityMinCol = useMemo(() => {
+    switch (gridDensity) {
+      case 'compact':
+        return '210px';
+      case 'spacious':
+        return '290px';
+      case 'normal':
+      default:
+        return '250px';
+    }
+  }, [gridDensity]);
 
   return (
     <VisualEditorProvider
@@ -1113,10 +1185,10 @@ export function App() {
       />
 
       {/* Catálogo de Productos con Experiencia Móvil de Alta Gama & Desktop Full-Width */}
-      <main ref={catalogRef} className={`relative z-10 flex-1 w-full max-w-[1920px] mx-auto px-3 sm:px-5 lg:px-6 xl:pl-4 xl:pr-6 2xl:pl-6 2xl:pr-8 py-6 sm:py-8 ${isAdmin ? 'pb-28 sm:pb-20' : ''}`}>
-        <div className="flex flex-col lg:flex-row items-start gap-4 lg:gap-5 xl:gap-5">
-          {/* Sidebar Lateral de Categorías Fijo y Flotante (Sticky fluido al hacer scroll) */}
-          <div className="hidden lg:block self-start sticky top-24 z-30 transition-all duration-300">
+      <main ref={catalogRef} className={`relative z-10 flex-1 w-full max-w-[1920px] mx-auto px-3 sm:px-5 lg:px-6 xl:px-8 py-6 sm:py-8 ${isAdmin ? 'pb-28 sm:pb-20' : ''}`}>
+        <div className="flex flex-col lg:flex-row items-start gap-5 xl:gap-6">
+          {/* Sidebar Lateral de Categorías Fijo y Flotante (Espacio Vertical Dedicado) */}
+          <div className="hidden lg:block w-[260px] 2xl:w-[285px] shrink-0 self-start sticky top-20 z-20 transition-all duration-300">
             <CategorySidebar
               categories={categories}
               products={products}
@@ -1125,6 +1197,15 @@ export function App() {
                 setActiveCategory(catId);
                 scrollToCatalog();
               }}
+              filterType={filterType}
+              onSelectType={setFilterType}
+              filterPriceMin={0}
+              filterPriceMax={filterPriceMax}
+              maxAvailablePrice={maxAvailablePrice}
+              onSelectPriceMax={setFilterPriceMax}
+              filterInStockOnly={filterInStockOnly}
+              onToggleInStockOnly={setFilterInStockOnly}
+              onResetFilters={handleResetFilters}
             />
           </div>
 
@@ -1177,8 +1258,8 @@ export function App() {
               </div>
 
               {/* Sub-barra: Contador de Productos y Selector de Orden con Estilo Cristal */}
-              <div className="flex items-center justify-between gap-3 px-1">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-3 px-1 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-mono-code font-bold uppercase tracking-wider text-slate-600 bg-white/80 backdrop-blur-md px-3 py-1 rounded-full border border-slate-200/80 shadow-2xs">
                     {filteredProducts.length} PRODUCTOS
                   </span>
@@ -1191,6 +1272,16 @@ export function App() {
                       <span>Filtro: {activeCategoryLabel || 'Categoría seleccionada'}</span>
                       <X className="w-3 h-3" />
                     </button>
+                  )}
+                  {filterType !== 'all' && (
+                    <span className="text-[10px] font-mono-code font-bold uppercase text-[#0A6CFF] bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                      Gama: {filterType.toUpperCase()}
+                    </span>
+                  )}
+                  {filterInStockOnly && (
+                    <span className="text-[10px] font-mono-code font-bold uppercase text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                      Stock inmediato
+                    </span>
                   )}
                 </div>
 
@@ -1242,9 +1333,12 @@ export function App() {
               </div>
             </div>
 
-            {/* Grid de Productos Móvil 2 Columnas / Desktop Amplio 4-5 Columnas */}
+            {/* Grid de Productos Fluida y Responsiva (.javrel-catalog-grid) */}
             {filteredProducts.length > 0 ? (
-              <div className={`grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 ${densityCols} gap-3 sm:gap-4 lg:gap-4 xl:gap-5 2xl:gap-5`}>
+              <div
+                className="javrel-catalog-grid"
+                style={{ '--grid-min-col': densityMinCol }}
+              >
                 {filteredProducts.map((product) => (
                   <ProductCard
                     key={product.id}
@@ -1272,10 +1366,7 @@ export function App() {
                   No hay productos que coincidan con los filtros seleccionados o tu búsqueda.
                 </p>
                 <button
-                  onClick={() => {
-                    setActiveCategory('all');
-                    setSearchTerm('');
-                  }}
+                  onClick={handleResetFilters}
                   className="px-5 py-2.5 rounded-full text-xs font-bold text-white bg-[#0A6CFF] hover:bg-[#0058D6] transition-colors shadow-sm cursor-pointer"
                 >
                   Restablecer Filtros
@@ -1470,11 +1561,7 @@ export function App() {
             sortBy={sortBy}
             onSelectSortBy={setSortBy}
             products={products}
-            onResetFilters={() => {
-              setActiveCategory('all');
-              setSearchTerm('');
-              setSortBy('featured');
-            }}
+            onResetFilters={handleResetFilters}
           />
         </Suspense>
       )}

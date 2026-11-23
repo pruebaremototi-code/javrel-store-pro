@@ -19,7 +19,11 @@ import {
   Image as ImageIcon,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
 } from 'lucide-react';
+import { TechViewer360 } from './TechViewer360';
 import { formatCurrency, buildWhatsAppUrl, storeService } from '../services/storeService';
 import {
   formatDisplayReference,
@@ -39,10 +43,6 @@ const SocialShareModal = React.lazy(() =>
 );
 
 // ─── AutoTextarea ────────────────────────────────────────────────────────────
-// Textarea que crece automáticamente con el contenido (auto-resize).
-// - Enter inserta salto de línea; Ctrl+Enter dispara onSave.
-// - Escape dispara onCancel.
-// - Nunca aparece una barra de scroll: el alto sigue al contenido.
 const AutoTextarea = React.forwardRef(function AutoTextarea(
   { value, onChange, onSave, onCancel, placeholder, className = '', autoFocus = false, minRows = 2 },
   forwardedRef
@@ -63,7 +63,6 @@ const AutoTextarea = React.forwardRef(function AutoTextarea(
     return () => cancelAnimationFrame(frame);
   }, [value, resize]);
 
-  // Auto-focus, cursor al final y scroll suave para evitar que el teclado móvil lo tape
   useEffect(() => {
     if (autoFocus && ref.current) {
       ref.current.focus();
@@ -116,10 +115,11 @@ export const ProductModal = ({
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isLinkCopied, setIsLinkCopied] = useState(false);
 
   // Estados para modal de selección y carga de imágenes
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
-  const [editingSlotIndex, setEditingSlotIndex] = useState(null); // null: cerrado, -1: nueva imagen, >= 0: reemplazar slot
+  const [editingSlotIndex, setEditingSlotIndex] = useState(null);
 
   // Estados para edición in-situ de Garantía y Envíos
   const [isEditingWarranty, setIsEditingWarranty] = useState(false);
@@ -128,7 +128,7 @@ export const ProductModal = ({
   const [shippingVal, setShippingVal] = useState('');
   const [applyGlobally, setApplyGlobally] = useState(false);
 
-  // Estados para edición CRUD de características/specs (deben estar ANTES del early return)
+  // Estados para edición CRUD de características/specs
   const [editingSpecIdx, setEditingSpecIdx] = useState(null);
   const [specTitleDraft, setSpecTitleDraft] = useState('');
   const [specDetailDraft, setSpecDetailDraft] = useState('');
@@ -142,12 +142,10 @@ export const ProductModal = ({
   const [descriptionDraft, setDescriptionDraft] = useState('');
   const [isSavingDescription, setIsSavingDescription] = useState(false);
 
-  // Generar o normalizar array de imágenes para la galería
-  // REGLA: El primer espacio corresponde siempre a la Imagen Principal
-  // y las miniaturas secundarias no se duplican artificialmente.
+  // Galería normalizada
   const galleryImages = React.useMemo(() => {
     if (!product) return [];
-    const mainImg = product.image || '/zafra/logo-menu.webp';
+    const mainImg = product.image || product.image_url || '/zafra/logo-menu.webp';
     let extraList = [];
 
     if (Array.isArray(product.images) && product.images.length > 0) {
@@ -161,83 +159,116 @@ export const ProductModal = ({
       ].filter(Boolean);
     }
 
-    // Primera posición garantizada como la imagen principal, seguida de fotos adicionales únicas
     const secondaryFiltered = extraList.filter((img) => img && img !== mainImg);
-    return [mainImg, ...secondaryFiltered];
+    const result = [mainImg, ...secondaryFiltered];
+    return result.length > 0 ? result : ['/zafra/logo-menu.webp'];
   }, [product]);
 
   useEffect(() => {
-    setQuantity(1);
     setSelectedImageIndex(0);
-    setIsEditingWarranty(false);
-    setIsEditingShipping(false);
+  }, [product?.id]);
+
+  useEffect(() => {
     if (product) {
       setWarrantyVal(product.warrantyText || config?.warrantyText || 'Garantía Oficial 12 Meses');
       setShippingVal(product.shippingText || config?.shippingText || 'Envíos Asegurados a Colombia');
     }
   }, [product, config]);
 
+  // Cierre con Escape
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   if (!product) return null;
 
-  const currentMainImage = galleryImages[selectedImageIndex] || product.image || '/zafra/logo-menu.webp';
-  const totalPrice = product.price * quantity;
+  const currentMainImage = galleryImages[selectedImageIndex] || galleryImages[0] || '/zafra/logo-menu.webp';
 
-  // Limpieza rigurosa de marca, categoría y códigos para vista pública (cero UUIDs)
-  const cleanBrandName = cleanBrand(product.brand, config?.storeName || 'JAVRELSTORE');
-  const rawCat = product.category;
-  const displayCategory = !rawCat || isUuid(rawCat) ? '' : sanitizeCommercialText(rawCat);
   const cleanRef = formatDisplayReference(product.reference, product.name, product.category, product.id);
-  const cleanEan = formatCleanEan(product.ean || product.barcode, product.id || cleanRef);
+  const cleanEan = formatCleanEan(product.barcode || product.ean, product.id);
+  const cleanBrandName = cleanBrand(product.brand) || 'JAVRELSTORE';
 
-  // Formatear especificación técnica de forma segura e infalible (evitando [object Object])
+  const handleCopyDirectLink = () => {
+    try {
+      const url = `${window.location.origin}/p/${product?.id}`;
+      navigator.clipboard.writeText(url);
+      setIsLinkCopied(true);
+      setTimeout(() => setIsLinkCopied(false), 2200);
+    } catch (e) {
+      console.warn('Error copiando link:', e);
+    }
+  };
+
+  const handlePrevImage = (e) => {
+    e?.stopPropagation();
+    setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : galleryImages.length - 1));
+  };
+
+  const handleNextImage = (e) => {
+    e?.stopPropagation();
+    setSelectedImageIndex((prev) => (prev < galleryImages.length - 1 ? prev + 1 : 0));
+  };
+
   const formatSpecItem = (spec) => {
     if (!spec) return null;
     if (typeof spec === 'string') {
-      const clean = spec.replace(/\[object Object\]/g, '').trim();
-      if (!clean) return null;
-      const colonIndex = clean.indexOf(':');
-      if (colonIndex !== -1) {
+      const parts = spec.split(':');
+      if (parts.length >= 2) {
         return {
-          title: clean.slice(0, colonIndex).trim().toUpperCase(),
-          detail: clean.slice(colonIndex + 1).trim(),
+          title: parts[0].trim(),
+          detail: parts.slice(1).join(':').trim(),
         };
       }
-      const words = clean.split(' ');
-      if (words.length > 2) {
-        return {
-          title: words.slice(0, 2).join(' ').toUpperCase(),
-          detail: words.slice(2).join(' '),
-        };
-      }
-      return { title: 'CARACTERÍSTICA', detail: clean };
+      return { title: 'CARACTERÍSTICA', detail: spec.trim() };
     }
     if (typeof spec === 'object' && spec !== null) {
-      const rawTitle = spec.title || spec.key || spec.name || 'CARACTERÍSTICA';
-      const rawDetail = spec.detail !== undefined ? spec.detail : spec.value !== undefined ? spec.value : spec.val;
-      const detailStr = String(rawDetail ?? '').replace(/\[object Object\]/g, '').trim();
-      if (!detailStr || detailStr === '[object Object]') return null;
-      return {
-        title: String(rawTitle).trim().toUpperCase(),
-        detail: detailStr,
-      };
+      const detailVal = spec.detail !== undefined ? spec.detail : spec.value !== undefined ? spec.value : spec.val;
+      const titleVal = spec.title || spec.key || spec.name || 'CARACTERÍSTICA';
+      if (detailVal !== undefined && detailVal !== null && String(detailVal) !== '[object Object]') {
+        return { title: String(titleVal).trim(), detail: String(detailVal).trim() };
+      }
+      const entries = Object.entries(spec).filter(
+        ([k, v]) => v && String(v) !== '[object Object]' && typeof v !== 'object'
+      );
+      if (entries.length > 0) {
+        return {
+          title: String(entries[0][0]).trim(),
+          detail: String(entries[0][1]).trim(),
+        };
+      }
     }
     return null;
   };
 
-  // Claves de metadata interna que NO deben mostrarse como specs públicas
-  const INTERNAL_SPEC_KEYS = /^(CONDICI[OÓ]N|ETIQUETA|SKU|EAN|BARCODE|COSTO|REFERENCIA|C[OÓ]DIGO)$/i;
+  const isHiddenSpecKey = (title = '', detail = '') => {
+    const raw = `${title} ${detail}`.toUpperCase();
+    return /^(CONDICIÓN|CONDICION|ETIQUETA|BADGE|COMMERCIALTAG|COSTO|PRICE|IMAGEN|IMAGE)$/i.test(title.trim());
+  };
 
-  // Formatear especificaciones técnicas preservando el rawIdx (índice real en product.specs)
-  // para que reordenamiento y edición operen sobre el array fuente correcto.
-  const formattedSpecs = (Array.isArray(product.specs) ? product.specs : [])
-    .map((spec, rawIdx) => {
+  const formattedSpecs = React.useMemo(() => {
+    if (!product || !Array.isArray(product.specs)) return [];
+    const seen = new Set();
+    const result = [];
+
+    product.specs.forEach((spec, rawIdx) => {
       const item = formatSpecItem(spec);
-      if (!item) return null;
-      if (!item.detail || /\[object Object\]/i.test(item.detail)) return null;
-      if (INTERNAL_SPEC_KEYS.test(item.title)) return null;
-      return { ...item, rawIdx };
-    })
-    .filter(Boolean);
+      if (!item) return;
+      if (!item.detail || /\[object Object\]/i.test(item.detail)) return;
+      if (isHiddenSpecKey(item.title, item.detail)) return;
+
+      const sig = `${item.title.trim().toUpperCase()}:::${item.detail.trim().toLowerCase()}`;
+      if (seen.has(sig)) return;
+      seen.add(sig);
+
+      result.push({ ...item, rawIdx });
+    });
+
+    return result;
+  }, [product?.specs]);
 
   const handleStartEditSpec = (rawIdx, currentItem) => {
     setEditingSpecIdx(rawIdx);
@@ -264,10 +295,7 @@ export const ProductModal = ({
     }
 
     try {
-      await storeService.updateProductAtomic({
-        ...product,
-        specs: currentList,
-      });
+      await storeService.updateProductAtomic({ ...product, specs: currentList });
       if (onRefetchProducts) await onRefetchProducts();
     } catch (err) {
       console.warn('Error actualizando característica:', err);
@@ -277,21 +305,17 @@ export const ProductModal = ({
     }
   };
 
-  const handleDeleteSpec = async (idx) => {
-    if (!window.confirm('¿Deseas eliminar esta característica del producto?')) return;
+  const handleDeleteSpec = async (rawIdx) => {
     setIsSavingSpecs(true);
     const currentList = Array.isArray(product.specs) ? [...product.specs] : [];
-    currentList.splice(idx, 1);
+    currentList.splice(rawIdx, 1);
 
     if (onUpdateProductField) {
       onUpdateProductField('specs', currentList);
     }
 
     try {
-      await storeService.updateProductAtomic({
-        ...product,
-        specs: currentList,
-      });
+      await storeService.updateProductAtomic({ ...product, specs: currentList });
       if (onRefetchProducts) await onRefetchProducts();
     } catch (err) {
       console.warn('Error eliminando característica:', err);
@@ -316,10 +340,7 @@ export const ProductModal = ({
     }
 
     try {
-      await storeService.updateProductAtomic({
-        ...product,
-        specs: currentList,
-      });
+      await storeService.updateProductAtomic({ ...product, specs: currentList });
       if (onRefetchProducts) await onRefetchProducts();
       setNewSpecTitle('');
       setNewSpecDetail('');
@@ -331,13 +352,10 @@ export const ProductModal = ({
     }
   };
 
-  // Reordenar spec: mueve el item del índice rawIdx en product.specs hacia arriba o hacia abajo
-  // rawIdx es el índice dentro de product.specs (el array completo, no el filtrado)
   const handleMoveSpec = async (rawIdx, direction) => {
     const currentList = Array.isArray(product.specs) ? [...product.specs] : [];
     const targetIdx = rawIdx + direction;
     if (targetIdx < 0 || targetIdx >= currentList.length) return;
-    // Intercambiar posiciones
     [currentList[rawIdx], currentList[targetIdx]] = [currentList[targetIdx], currentList[rawIdx]];
 
     if (onUpdateProductField) {
@@ -354,7 +372,6 @@ export const ProductModal = ({
     }
   };
 
-  // Guardar descripción editada en Supabase
   const handleSaveDescription = async () => {
     const finalVal = descriptionDraft.trim();
     setIsSavingDescription(true);
@@ -372,7 +389,6 @@ export const ProductModal = ({
     }
   };
 
-  // Eliminar descripción (dejarla vacía)
   const handleDeleteDescription = async () => {
     if (!window.confirm('¿Deseas eliminar la descripción de este producto?')) return;
     setIsSavingDescription(true);
@@ -393,12 +409,12 @@ export const ProductModal = ({
   const handleWhatsAppBuy = () => {
     confetti({
       particleCount: 50,
-      spread: 70,
-      origin: { y: 0.7 },
-      colors: ['#0A6CFF', '#38BDF8', '#10B981'],
+      spread: 60,
+      origin: { y: 0.8 },
+      colors: ['#0A6CFF', '#0052FF', '#38BDF8', '#10B981'],
     });
 
-    const msg = `¡Hola ${config?.storeName || 'JavrelStore'}! Deseo comprar *${quantity} unidad(es)* de:\n*${product.name}*\nRef: ${cleanRef}\nTotal: *${formatCurrency(totalPrice)}*\n¿Tienen unidades listas para despacho inmediato?`;
+    const msg = `¡Hola ${config?.storeName || 'JavrelStore'}! Quiero comprar:\n\n*${product.name}*\n- Ref: ${cleanRef}\n- Cantidad: ${quantity}\n- Total: ${formatCurrency(product.price * quantity)}\n\n¿Me confirman disponibilidad y medios de pago?`;
     const url = buildWhatsAppUrl(config?.whatsappNumber, msg);
     window.open(url, '_blank', 'noopener,noreferrer');
   };
@@ -407,14 +423,12 @@ export const ProductModal = ({
     setIsShareOpen(true);
   };
 
-  // Abrir selector de imagen para un slot específico (-1 para nuevo slot)
   const handleOpenImageSlotPicker = (e, index) => {
     e.stopPropagation();
     setEditingSlotIndex(index);
     setIsImagePickerOpen(true);
   };
 
-  // Guardar imagen seleccionada desde el picker (URL, Visor Web o WebP local)
   const handleSavePickedImage = async (newImageUrl) => {
     if (!newImageUrl) return;
 
@@ -422,16 +436,13 @@ export const ProductModal = ({
     let newMainImage = product.image;
 
     if (editingSlotIndex === -1) {
-      // Añadir nueva imagen secundaria
       updatedList.push(newImageUrl);
       setSelectedImageIndex(updatedList.length - 1);
     } else if (editingSlotIndex === 0) {
-      // Actualizar imagen principal
       newMainImage = newImageUrl;
       updatedList[0] = newImageUrl;
       setSelectedImageIndex(0);
     } else if (editingSlotIndex > 0) {
-      // Actualizar imagen secundaria existente
       updatedList[editingSlotIndex] = newImageUrl;
       setSelectedImageIndex(editingSlotIndex);
     }
@@ -443,7 +454,6 @@ export const ProductModal = ({
       onUpdateProductField('images', updatedList);
     }
 
-    // Persistencia atómica inmediata en Supabase y notificación multi-dispositivo
     try {
       await storeService.updateProductAtomic({
         ...product,
@@ -459,7 +469,6 @@ export const ProductModal = ({
     setEditingSlotIndex(null);
   };
 
-  // Eliminar imagen secundaria
   const handleRemoveSecondaryImage = async (e, indexToRemove) => {
     e.stopPropagation();
     if (indexToRemove === 0) return;
@@ -481,17 +490,13 @@ export const ProductModal = ({
     }
   };
 
-  // Guardar Garantía in-situ con persistencia atómica en Supabase
   const handleSaveWarranty = async () => {
     const finalVal = warrantyVal.trim() || 'Garantía Oficial 12 Meses';
     if (onUpdateProductField) {
       onUpdateProductField('warrantyText', finalVal);
     }
     try {
-      await storeService.updateProductAtomic({
-        ...product,
-        warrantyText: finalVal,
-      });
+      await storeService.updateProductAtomic({ ...product, warrantyText: finalVal });
       if (applyGlobally && onUpdateConfig) {
         const newCfg = { ...config, warrantyText: finalVal };
         onUpdateConfig(newCfg);
@@ -504,17 +509,13 @@ export const ProductModal = ({
     setIsEditingWarranty(false);
   };
 
-  // Guardar Envíos in-situ con persistencia atómica en Supabase
   const handleSaveShipping = async () => {
     const finalVal = shippingVal.trim() || 'Envíos Asegurados a Colombia';
     if (onUpdateProductField) {
       onUpdateProductField('shippingText', finalVal);
     }
     try {
-      await storeService.updateProductAtomic({
-        ...product,
-        shippingText: finalVal,
-      });
+      await storeService.updateProductAtomic({ ...product, shippingText: finalVal });
       if (applyGlobally && onUpdateConfig) {
         const newCfg = { ...config, shippingText: finalVal };
         onUpdateConfig(newCfg);
@@ -530,7 +531,7 @@ export const ProductModal = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden flex items-start sm:items-center justify-center p-2 sm:p-4 bg-black/55 backdrop-blur-xs animate-fadeIn"
+        className="fixed inset-0 z-50 overflow-y-auto overflow-x-hidden flex items-start sm:items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
         onClick={onClose}
       >
         <div
@@ -538,41 +539,24 @@ export const ProductModal = ({
           aria-modal="true"
           aria-label="Detalle del producto"
           data-product-detail-modal="true"
-          className="relative w-full max-w-5xl bg-white text-slate-900 rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-4 sm:my-8 transform transition-all animate-scaleUp max-h-[94vh] flex flex-col"
+          className="relative w-full max-w-[1440px] w-[96vw] mx-auto rounded-3xl shadow-2xl overflow-hidden my-2 sm:my-3 transform transition-all animate-scaleUp max-h-[96vh] flex flex-col bg-white border border-slate-200"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Barra Superior (Cero UUIDs técnicos en vista pública) */}
+          {/* Barra Superior con Marca e Indicadores de Estado */}
           <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50/80">
             <div className="flex items-center gap-2 flex-wrap min-w-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-              <span className="text-xs font-mono-code font-bold uppercase tracking-wider text-slate-500 truncate">
-                {cleanBrandName} {displayCategory ? `• ${displayCategory.toUpperCase()}` : ''}
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+              <span className="text-xs font-mono-code font-bold uppercase tracking-widest text-[#0A6CFF] truncate">
+                {cleanBrandName} {product.category ? `• ${String(product.category).toUpperCase()}` : ''}
               </span>
 
-              {/* Distintivos Dinámicos: Estado Físico y Promoción */}
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                  product.condition === 'Seminuevo'
-                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                    : product.condition === 'Usado'
-                      ? 'bg-slate-200 text-slate-800 border border-slate-300'
-                      : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                }`}
-              >
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-200 text-slate-800 border border-slate-300">
                 ● {product.condition || 'Nuevo'}
               </span>
 
               {(product.commercialTag || product.badge) && (
-                <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                    /black\s*friday/i.test(product.commercialTag || product.badge)
-                      ? 'bg-black text-amber-300 border border-amber-400/50 shadow-xs'
-                      : /oferta/i.test(product.commercialTag || product.badge)
-                        ? 'bg-rose-500 text-white shadow-xs'
-                        : 'bg-blue-100 text-blue-800 border border-blue-200'
-                  }`}
-                >
-                  <Sparkles className="w-2.5 h-2.5" />
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200">
+                  <Sparkles className="w-3 h-3 inline text-[#0A6CFF]" />
                   {product.commercialTag || product.badge}
                 </span>
               )}
@@ -580,22 +564,83 @@ export const ProductModal = ({
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
               title="Cerrar ventana"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Cuerpo del Modal */}
-          <div className="overflow-y-auto flex-1 p-4 sm:p-6 lg:p-8 no-scrollbar">
+          {/* Cuerpo del Modal — 2 Columnas Balanceadas de Alto Impacto */}
+          <div className="overflow-y-auto flex-1 p-4 sm:p-6 lg:p-8 no-scrollbar space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
 
-              {/* SECCIÓN IZQUIERDA: GALERÍA DE MINIATURAS + FOTO PRINCIPAL */}
-              <div className="lg:col-span-6 flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 items-center sm:items-start">
-                
-                {/* Tira de Miniaturas (Thumbnails Dinámica) */}
-                <div className="flex sm:flex-col gap-2.5 overflow-x-auto sm:overflow-y-auto max-h-[420px] no-scrollbar w-full sm:w-20 flex-shrink-0 justify-center sm:justify-start py-1">
+              {/* SECCIÓN IZQUIERDA: GALERÍA VISUAL DOMINANTE CON TECHVIEWER 360° */}
+              <div className="lg:col-span-7 flex flex-col gap-3 sm:gap-4">
+                {/* Contenedor Principal del Visor 360° / 3D */}
+                <div className="relative w-full aspect-square sm:aspect-[4/3] lg:aspect-[4/3] bg-gradient-to-b from-slate-50 via-white to-slate-50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 flex items-center justify-center border border-slate-200 shadow-sm overflow-hidden group">
+                  
+                  {/* Visor Interactivo 360° / Inclinación 3D */}
+                  <TechViewer360
+                    images={galleryImages}
+                    activeImageIdx={selectedImageIndex}
+                    onIndexChange={setSelectedImageIndex}
+                    alt={product.name}
+                    className="w-full h-full"
+                  />
+
+                  {/* Botón Lupa Zoom (Pantalla Completa) */}
+                  <button
+                    type="button"
+                    onClick={() => onOpenLightbox && onOpenLightbox(product, selectedImageIndex, galleryImages)}
+                    className="absolute bottom-3 left-3 z-20 px-3 py-1.5 rounded-xl bg-slate-900/85 hover:bg-slate-900 text-white border border-white/20 shadow-md backdrop-blur-md flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer hover:scale-105"
+                    title="Ampliar imagen en pantalla completa"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5 text-[#0A6CFF]" />
+                    <span>Lupa Zoom</span>
+                  </button>
+
+                  {/* Contador y Navegación entre Fotografías */}
+                  {galleryImages.length > 1 && (
+                    <div className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 bg-slate-900/85 border border-white/20 rounded-xl px-2 py-1 backdrop-blur-md text-white shadow-md">
+                      <button
+                        type="button"
+                        onClick={handlePrevImage}
+                        className="p-1 hover:text-[#0A6CFF] transition-colors cursor-pointer"
+                        title="Foto anterior"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-[11px] font-mono-code font-bold px-1 select-none">
+                        {selectedImageIndex + 1} / {galleryImages.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleNextImage}
+                        className="p-1 hover:text-[#0A6CFF] transition-colors cursor-pointer"
+                        title="Foto siguiente"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Administrador: Reemplazar foto actual */}
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenImageSlotPicker(e, selectedImageIndex)}
+                      className="absolute top-3 right-3 z-20 px-2.5 py-1.5 rounded-xl bg-white/95 hover:bg-white border border-slate-200 text-xs font-bold text-slate-800 hover:text-blue-600 shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
+                      title="Reemplazar esta imagen"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Cambiar Foto</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Tira Horizontal de Miniaturas con Badge "PORTADA" */}
+                <div className="flex items-center gap-2.5 overflow-x-auto py-1 no-scrollbar">
                   {galleryImages.map((imgUrl, idx) => {
                     const isMainSlot = idx === 0;
                     const isSelected = selectedImageIndex === idx;
@@ -603,9 +648,9 @@ export const ProductModal = ({
                     return (
                       <div
                         key={idx}
-                        className={`group/thumb relative w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-xl sm:rounded-2xl p-1 bg-white transition-all duration-200 flex-shrink-0 cursor-pointer border-2 ${
+                        className={`group/thumb relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl p-1 bg-white transition-all duration-200 flex-shrink-0 cursor-pointer border-2 ${
                           isSelected
-                            ? 'border-[#0A6CFF] shadow-md shadow-blue-500/15 scale-[1.02]'
+                            ? 'border-[#0A6CFF] shadow-md shadow-blue-500/20 scale-[1.03]'
                             : 'border-slate-200 opacity-75 hover:opacity-100 hover:border-slate-300'
                         }`}
                         onClick={() => setSelectedImageIndex(idx)}
@@ -618,21 +663,19 @@ export const ProductModal = ({
                           loading="lazy"
                         />
 
-                        {/* Etiqueta Principal en el primer slot */}
                         {isMainSlot && (
                           <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.2 rounded-md bg-blue-600 text-[8px] font-mono-code font-bold uppercase tracking-wider text-white shadow-2xs">
-                            Ppal
+                            PORTADA
                           </span>
                         )}
 
-                        {/* Controles de Edición In-Situ al pasar el mouse (si tiene permisos) */}
                         {canEdit && (
                           <div className="absolute inset-0 bg-slate-900/60 rounded-xl opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1 z-10">
                             <button
                               type="button"
                               onClick={(e) => handleOpenImageSlotPicker(e, idx)}
                               className="p-1 rounded-md bg-white text-slate-800 hover:bg-blue-50 hover:text-blue-600 shadow-sm transition-colors"
-                              title={isMainSlot ? 'Cambiar Imagen Principal' : `Cambiar foto ${idx + 1}`}
+                              title={isMainSlot ? 'Cambiar Foto Principal' : `Cambiar foto ${idx + 1}`}
                             >
                               <Pencil className="w-3 h-3" />
                             </button>
@@ -653,113 +696,105 @@ export const ProductModal = ({
                     );
                   })}
 
-                  {/* Botón Dinámico "+" para Asignar / Añadir Nueva Imagen */}
+                  {/* Botón "+" para añadir imagen a la galería */}
                   {canEdit && (
                     <button
                       type="button"
                       onClick={(e) => handleOpenImageSlotPicker(e, -1)}
-                      className="group/add w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-xl sm:rounded-2xl border-2 border-dashed border-blue-300 hover:border-blue-600 bg-blue-50/50 hover:bg-blue-50 text-blue-600 flex flex-col items-center justify-center gap-0.5 transition-all flex-shrink-0 cursor-pointer shadow-2xs hover:scale-102"
-                      title="Añadir nueva foto a la galería (URL, Visor Web o WebP local)"
+                      className="group/add w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl border-2 border-dashed border-blue-300 hover:border-blue-600 bg-blue-50/50 hover:bg-blue-50 text-blue-600 flex flex-col items-center justify-center gap-0.5 transition-all flex-shrink-0 cursor-pointer shadow-2xs hover:scale-102"
+                      title="Añadir nueva foto a la galería"
                     >
                       <Plus className="w-5 h-5 group-hover/add:rotate-90 transition-transform duration-200 text-blue-600" />
                       <span className="text-[9px] font-bold tracking-tight text-blue-700">Añadir</span>
                     </button>
                   )}
                 </div>
-
-                {/* Imagen Central en Alta Resolución */}
-                <div className="relative flex-1 w-full aspect-square bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 flex items-center justify-center border border-slate-200 shadow-sm overflow-hidden group">
-                  {product.badge && (
-                    <div className="absolute top-3 left-3 z-10">
-                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-mono-code font-bold uppercase tracking-wider bg-slate-800 text-white shadow-sm">
-                        {product.badge}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Botón flotante para editar la foto actualmente en vista */}
-                  {canEdit && (
-                    <button
-                      type="button"
-                      onClick={(e) => handleOpenImageSlotPicker(e, selectedImageIndex)}
-                      className="absolute top-3 right-3 z-10 px-2.5 py-1.5 rounded-xl bg-white/90 hover:bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:text-blue-600 shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-                      title="Reemplazar esta imagen"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Cambiar Foto</span>
-                    </button>
-                  )}
-
-                  <div
-                    onClick={() => onOpenLightbox && onOpenLightbox(product, selectedImageIndex, galleryImages)}
-                    className="w-full h-full flex items-center justify-center cursor-zoom-in"
-                    title="Haz clic para ampliar en pantalla completa"
-                  >
-                    <img
-                      src={currentMainImage}
-                      alt={product.name}
-                      className="w-full h-full object-contain filter drop-shadow-sm transition-transform duration-500 group-hover:scale-105"
-                      onError={(e) => {
-                        e.target.src = '/zafra/logo-menu.webp';
-                      }}
-                    />
-
-                    {/* Lupa flotante */}
-                    <div className="absolute bottom-3 right-3 p-2 rounded-full bg-slate-800/70 text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
-                      <ZoomIn className="w-4 h-4" />
-                    </div>
-                  </div>
-                </div>
               </div>
 
-              {/* SECCIÓN DERECHA: INFORMACIÓN Y ACCIONES */}
-              <div className="lg:col-span-6 flex flex-col justify-between space-y-4">
+              {/* SECCIÓN DERECHA: INFORMACIÓN, COMPRA Y ESPECIFICACIONES TÉCNICAS */}
+              <div className="lg:col-span-5 flex flex-col justify-between space-y-4">
                 <div>
-                  {/* Cabecera: Marca y Compartir */}
+                  {/* Cabecera: Marca y Rating */}
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-[11px] font-mono-code font-bold uppercase tracking-wider text-[#0A6CFF] bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-md">
-                      {product.brand || 'JAVRELSTORE'}
+                    <span className="text-[11px] font-mono-code font-bold uppercase tracking-wider text-[#0A6CFF] bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-lg">
+                      {cleanBrandName}
                     </span>
-
-                    <button
-                      onClick={handleShare}
-                      className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                      <span>Compartir</span>
-                    </button>
+                    <div className="flex items-center gap-1 text-amber-500">
+                      <Star className="w-3.5 h-3.5 fill-amber-500" />
+                      <span className="font-bold text-slate-700 text-xs">
+                        {product.rating || '5.0'}
+                      </span>
+                      {product.reviews && (
+                        <span className="text-slate-400 text-xs">({product.reviews})</span>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Título */}
-                  <h1 className="font-display font-extrabold text-lg sm:text-xl md:text-2xl text-slate-900 uppercase tracking-tight leading-snug mb-3">
+                  {/* Título en Tipografía Grande y Clara */}
+                  <h1 className="font-display font-extrabold text-xl sm:text-2xl lg:text-3xl text-slate-900 tracking-tight leading-snug mb-3">
                     {product.name}
                   </h1>
 
-                  {/* Precio y Disponibilidad */}
+                  {/* Precio Grande y Estado de Existencias */}
                   <div className="mb-4">
-                    <div className="flex items-baseline gap-3 mb-1">
-                      <span className="font-display font-black text-2xl sm:text-3xl text-slate-900 tracking-tight">
+                    <div className="flex items-baseline gap-3 mb-1 flex-wrap">
+                      <span className="font-display font-black text-2xl sm:text-3xl lg:text-4xl text-slate-900 tracking-tight">
                         {formatCurrency(product.price)}
                       </span>
                       {product.originalPrice && product.originalPrice > product.price && (
-                        <span className="text-sm sm:text-base text-slate-400 line-through">
+                        <span className="text-base sm:text-lg text-slate-400 line-through decoration-slate-300 font-semibold">
                           {formatCurrency(product.originalPrice)}
                         </span>
                       )}
                     </div>
 
-                    {/* Indicador de Existencias */}
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold mt-1">
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-bold mt-1">
                       <Check className="w-4 h-4" />
-                      <span>Hay existencias</span>
+                      <span>Despacho inmediato disponible</span>
                     </div>
                   </div>
 
-                  {/* Controles de Cantidad + Botones */}
+                  {/* Barra Rápida de Difusión (9:16 + Copiar Enlace Directo) */}
+                  <div className="p-3 sm:p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 flex items-center justify-between gap-3 shadow-xs mb-4">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-blue-600/10 border border-blue-600/25 flex items-center justify-center shrink-0">
+                        <Share2 className="w-4 h-4 text-[#0A6CFF]" />
+                      </div>
+                      <div className="min-w-0">
+                        <h5 className="text-xs font-mono-code font-bold uppercase tracking-wider text-slate-900 truncate">
+                          Difusión en Redes
+                        </h5>
+                        <p className="text-[10px] text-slate-500 truncate">Tarjeta vertical 9:16 lista</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleShare}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-[#0A6CFF] to-[#0052FF] text-white hover:brightness-105 active:scale-95 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        title="Generar y compartir tarjeta 9:16 para historias y redes"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Compartir 9:16</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCopyDirectLink}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-700 hover:text-[#0A6CFF] border border-slate-200 hover:border-blue-300 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        title="Copiar enlace directo al portapapeles"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>{isLinkCopied ? '¡Copiado!' : 'Copiar'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Controles de Cantidad + Botones Principales */}
                   <div className="space-y-3 mb-5">
                     <div className="flex items-center gap-3">
                       {/* Selector de Cantidad */}
-                      <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
                         <button
                           onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                           disabled={quantity <= 1}
@@ -786,24 +821,24 @@ export const ProductModal = ({
                             onClose();
                           }
                         }}
-                        className="flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer shadow-sm"
+                        className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-[#0A6CFF] to-[#0052FF] hover:from-[#0052FF] hover:to-[#0040cc] flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer shadow-md shadow-blue-500/25"
                       >
                         <ShoppingBag className="w-4 h-4" />
                         <span className="uppercase tracking-wider">Añadir al Carrito</span>
                       </button>
                     </div>
 
-                    {/* Botón Comprar Ahora */}
+                    {/* Botón Comprar por WhatsApp */}
                     <button
                       onClick={handleWhatsAppBuy}
-                      className="w-full py-3.5 px-4 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wider text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full min-h-[44px] py-3 px-4 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wider text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/20 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <MessageCircle className="w-4 h-4" />
-                      <span>Comprar Ahora</span>
+                      <span>Comprar por WhatsApp</span>
                     </button>
                   </div>
 
-                  {/* Código de Referencia / EAN Comercial Limpio */}
+                  {/* Código de Referencia / EAN */}
                   <div className="text-[11px] font-mono-code text-slate-500 mb-4 pb-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-slate-700">REF:</span>
@@ -819,7 +854,7 @@ export const ProductModal = ({
                     </div>
                   </div>
 
-                  {/* FICHA TÉCNICA ESTRUCTURADA Y TOTALMENTE EDITABLE EN MODO ADMIN */}
+                  {/* CARACTERÍSTICAS Y ESPECIFICACIONES TÉCNICAS */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
                       <span className="text-xs font-mono-code font-bold uppercase tracking-wider text-slate-500">
@@ -851,7 +886,7 @@ export const ProductModal = ({
                             onChange={setNewSpecTitle}
                             onSave={handleCreateNewSpec}
                             onCancel={() => setIsAddingSpec(false)}
-                            placeholder="Título (ej: Procesador)"
+                            placeholder="Título (ej: Conectividad)"
                             minRows={1}
                             autoFocus
                             className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 font-semibold"
@@ -861,7 +896,7 @@ export const ProductModal = ({
                             onChange={setNewSpecDetail}
                             onSave={handleCreateNewSpec}
                             onCancel={() => setIsAddingSpec(false)}
-                            placeholder="Detalle (ej: Intel Core i7 — Ctrl+Enter para guardar)"
+                            placeholder="Detalle (ej: Bluetooth 5.3 + USB-C)"
                             minRows={2}
                             className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-blue-500"
                           />
@@ -872,7 +907,7 @@ export const ProductModal = ({
                             <button
                               type="button"
                               onClick={() => setIsAddingSpec(false)}
-                              className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors cursor-pointer touch-manipulation"
+                              className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors cursor-pointer"
                             >
                               Cancelar
                             </button>
@@ -880,9 +915,9 @@ export const ProductModal = ({
                               type="button"
                               onClick={handleCreateNewSpec}
                               disabled={isSavingSpecs || !newSpecDetail.trim()}
-                              className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs touch-manipulation"
+                              className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs"
                             >
-                              {isSavingSpecs ? 'Guardando...' : 'Guardar Característica'}
+                              {isSavingSpecs ? 'Guardando...' : 'Guardar'}
                             </button>
                           </div>
                         </div>
@@ -913,18 +948,17 @@ export const ProductModal = ({
                                   onChange={setSpecDetailDraft}
                                   onSave={() => handleSaveEditSpec(item.rawIdx)}
                                   onCancel={() => setEditingSpecIdx(null)}
-                                  placeholder="Detalle completo (Ctrl+Enter para guardar)"
+                                  placeholder="Detalle completo"
                                   minRows={2}
                                   autoFocus
                                   className="px-2.5 py-1 text-xs bg-white border border-blue-400 rounded-lg outline-none focus:ring-1 focus:ring-blue-500"
                                 />
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] text-slate-400 hidden sm:block">Ctrl+Enter para guardar · Esc para cancelar</span>
                                   <div className="flex items-center gap-1.5 ml-auto">
                                     <button
                                       type="button"
                                       onClick={() => setEditingSpecIdx(null)}
-                                      className="px-2.5 py-1 rounded-lg bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300 touch-manipulation"
+                                      className="px-2.5 py-1 rounded-lg bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300"
                                     >
                                       ✕ Cancelar
                                     </button>
@@ -932,7 +966,7 @@ export const ProductModal = ({
                                       type="button"
                                       onClick={() => handleSaveEditSpec(item.rawIdx)}
                                       disabled={isSavingSpecs}
-                                      className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-xs touch-manipulation"
+                                      className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-xs"
                                     >
                                       {isSavingSpecs ? 'Guardando...' : '✓ Guardar'}
                                     </button>
@@ -941,16 +975,14 @@ export const ProductModal = ({
                               </div>
                             ) : (
                               <>
-                                {/* Controles de reordenamiento ↑/↓ — siempre visibles en touch, hover en desktop */}
                                 {canEdit && (
-                                  <div className="flex flex-col gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity touch:opacity-100">
+                                  <div className="flex flex-col gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
                                       type="button"
                                       onClick={() => handleMoveSpec(item.rawIdx, -1)}
                                       disabled={visIdx === 0 || isSavingSpecs}
-                                      className="p-0.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 transition-colors touch-manipulation"
+                                      className="p-0.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20"
                                       title="Mover arriba"
-                                      aria-label="Mover característica arriba"
                                     >
                                       <ChevronUp className="w-3.5 h-3.5" />
                                     </button>
@@ -958,9 +990,8 @@ export const ProductModal = ({
                                       type="button"
                                       onClick={() => handleMoveSpec(item.rawIdx, 1)}
                                       disabled={visIdx === formattedSpecs.length - 1 || isSavingSpecs}
-                                      className="p-0.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 transition-colors touch-manipulation"
+                                      className="p-0.5 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20"
                                       title="Mover abajo"
-                                      aria-label="Mover característica abajo"
                                     >
                                       <ChevronDown className="w-3.5 h-3.5" />
                                     </button>
@@ -974,13 +1005,12 @@ export const ProductModal = ({
                                   {item.detail}
                                 </p>
 
-                                {/* Editar / Eliminar */}
                                 {canEdit && (
-                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                     <button
                                       type="button"
                                       onClick={() => handleStartEditSpec(item.rawIdx, item)}
-                                      className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors touch-manipulation"
+                                      className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                                       title="Editar esta característica"
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
@@ -988,7 +1018,7 @@ export const ProductModal = ({
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteSpec(item.rawIdx)}
-                                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors touch-manipulation"
+                                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
                                       title="Eliminar esta característica"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
@@ -1006,7 +1036,7 @@ export const ProductModal = ({
                       </p>
                     )}
 
-                    {/* Descripción General — Editable y Eliminable en modo Admin */}
+                    {/* Descripción General */}
                     {(product.description || canEdit) && (
                       <div className="mt-3 pt-3 border-t border-slate-100">
                         <div className="flex items-center justify-between mb-1.5 gap-2">
@@ -1021,7 +1051,7 @@ export const ProductModal = ({
                                   setDescriptionDraft(product.description || '');
                                   setIsEditingDescription(true);
                                 }}
-                                className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors touch-manipulation"
+                                className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                                 title="Editar descripción"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
@@ -1031,7 +1061,7 @@ export const ProductModal = ({
                                   type="button"
                                   onClick={handleDeleteDescription}
                                   disabled={isSavingDescription}
-                                  className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors touch-manipulation"
+                                  className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
                                   title="Eliminar descripción"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -1048,30 +1078,27 @@ export const ProductModal = ({
                               onChange={setDescriptionDraft}
                               onSave={handleSaveDescription}
                               onCancel={() => setIsEditingDescription(false)}
-                              placeholder="Descripción completa del producto (Ctrl+Enter para guardar)..."
+                              placeholder="Descripción completa del producto..."
                               minRows={3}
                               autoFocus
                               className="px-3 py-2 text-sm border border-blue-400 rounded-xl bg-white text-slate-900 outline-none focus:ring-1 focus:ring-blue-500"
                             />
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-[10px] text-slate-400 hidden sm:block">Enter = salto de línea · Ctrl+Enter = guardar · Esc = cancelar</span>
-                              <div className="flex items-center gap-2 ml-auto">
-                                <button
-                                  type="button"
-                                  onClick={() => setIsEditingDescription(false)}
-                                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors cursor-pointer touch-manipulation"
-                                >
-                                  Cancelar
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={handleSaveDescription}
-                                  disabled={isSavingDescription}
-                                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer shadow-xs touch-manipulation"
-                                >
-                                  {isSavingDescription ? 'Guardando...' : '✓ Guardar Descripción'}
-                                </button>
-                              </div>
+                            <div className="flex items-center gap-2 ml-auto justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingDescription(false)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveDescription}
+                                disabled={isSavingDescription}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-xs"
+                              >
+                                {isSavingDescription ? 'Guardando...' : '✓ Guardar Descripción'}
+                              </button>
                             </div>
                           </div>
                         ) : (
@@ -1081,18 +1108,13 @@ export const ProductModal = ({
                             </p>
                           )
                         )}
-                        {canEdit && !product.description && !isEditingDescription && (
-                          <p className="text-xs text-slate-400 italic">Sin descripción. Haz clic en ✏️ para agregar.</p>
-                        )}
                       </div>
                     )}
                   </div>
 
-                  {/* SELLOS DE CONFIANZA: GARANTÍA Y ENVÍOS (EDITABLES IN-SITU) */}
+                  {/* SELLOS DE CONFIANZA: GARANTÍA Y ENVÍOS */}
                   <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-600">
-                    
-                    {/* 1. Garantía Oficial */}
-                    <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80 transition-colors">
+                    <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80">
                       <div className="flex items-center gap-2 mb-1">
                         <ShieldCheck className="w-4 h-4 text-[#0A6CFF] flex-shrink-0" />
                         <span className="text-[10px] font-mono-code font-bold uppercase tracking-wider text-slate-400">
@@ -1102,7 +1124,7 @@ export const ProductModal = ({
                           <button
                             type="button"
                             onClick={() => setIsEditingWarranty(true)}
-                            className="ml-auto text-slate-400 hover:text-blue-600 transition-colors cursor-pointer p-0.5"
+                            className="ml-auto text-slate-400 hover:text-blue-600 transition-colors p-0.5"
                             title="Editar texto de garantía"
                           >
                             <Pencil className="w-3 h-3" />
@@ -1130,20 +1152,20 @@ export const ProductModal = ({
                                 onChange={(e) => setApplyGlobally(e.target.checked)}
                                 className="rounded text-blue-600"
                               />
-                              <span>Guardar como predeterminado</span>
+                              <span>Predeterminado</span>
                             </label>
                             <div className="flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => setIsEditingWarranty(false)}
-                                className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 font-semibold cursor-pointer touch-manipulation"
+                                className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold"
                               >
                                 ✕
                               </button>
                               <button
                                 type="button"
                                 onClick={handleSaveWarranty}
-                                className="px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 font-bold cursor-pointer touch-manipulation"
+                                className="px-2 py-0.5 rounded bg-blue-600 text-white font-bold"
                               >
                                 ✓
                               </button>
@@ -1156,15 +1178,13 @@ export const ProductModal = ({
                           className={`font-semibold text-slate-800 whitespace-pre-line break-words ${
                             canEdit ? 'cursor-pointer hover:text-blue-600' : ''
                           }`}
-                          title={canEdit ? 'Haz clic para editar' : undefined}
                         >
                           {product.warrantyText || config?.warrantyText || 'Garantía Oficial 12 Meses'}
                         </p>
                       )}
                     </div>
 
-                    {/* 2. Envíos Asegurados */}
-                    <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80 transition-colors">
+                    <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80">
                       <div className="flex items-center gap-2 mb-1">
                         <Truck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                         <span className="text-[10px] font-mono-code font-bold uppercase tracking-wider text-slate-400">
@@ -1174,7 +1194,7 @@ export const ProductModal = ({
                           <button
                             type="button"
                             onClick={() => setIsEditingShipping(true)}
-                            className="ml-auto text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-0.5"
+                            className="ml-auto text-slate-400 hover:text-emerald-600 transition-colors p-0.5"
                             title="Editar texto de envíos"
                           >
                             <Pencil className="w-3 h-3" />
@@ -1202,20 +1222,20 @@ export const ProductModal = ({
                                 onChange={(e) => setApplyGlobally(e.target.checked)}
                                 className="rounded text-emerald-600"
                               />
-                              <span>Guardar como predeterminado</span>
+                              <span>Predeterminado</span>
                             </label>
                             <div className="flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => setIsEditingShipping(false)}
-                                className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 font-semibold cursor-pointer touch-manipulation"
+                                className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold"
                               >
                                 ✕
                               </button>
                               <button
                                 type="button"
                                 onClick={handleSaveShipping}
-                                className="px-2 py-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-700 font-bold cursor-pointer touch-manipulation"
+                                className="px-2 py-0.5 rounded bg-emerald-600 text-white font-bold"
                               >
                                 ✓
                               </button>
@@ -1228,13 +1248,11 @@ export const ProductModal = ({
                           className={`font-semibold text-slate-800 whitespace-pre-line break-words ${
                             canEdit ? 'cursor-pointer hover:text-emerald-600' : ''
                           }`}
-                          title={canEdit ? 'Haz clic para editar' : undefined}
                         >
                           {product.shippingText || config?.shippingText || 'Envíos Asegurados a Colombia'}
                         </p>
                       )}
                     </div>
-
                   </div>
                 </div>
               </div>
@@ -1244,7 +1262,7 @@ export const ProductModal = ({
         </div>
       </div>
 
-      {/* Centro de Difusión Multicanal */}
+      {/* Centro de Difusión */}
       {isShareOpen && (
         <React.Suspense fallback={null}>
           <SocialShareModal
@@ -1257,7 +1275,7 @@ export const ProductModal = ({
         </React.Suspense>
       )}
 
-      {/* Modal Selector de Imagen con Soporte de URL, Visor Web y WebP Local */}
+      {/* Selector de Imagen */}
       {isImagePickerOpen && (
         <React.Suspense fallback={null}>
           <ImagePickerModal

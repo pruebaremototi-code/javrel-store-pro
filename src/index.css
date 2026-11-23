@@ -220,4 +220,81 @@
   transform: translateY(-1px);
 }
 
+/* ========================================================
+   GRILLA FLUIDA AUTOAJUSTABLE AL ZOOM Y PANTALLA
+   ======================================================== */
+.javrel-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  gap: 1rem;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .javrel-catalog-grid {
+    grid-template-columns: repeat(auto-fill, minmax(var(--grid-min-col, 260px), 1fr));
+    gap: 1.25rem;
+  }
+}
+
+/* ========================================================
+   TARJETA DE PRODUCTO LUXURY — IDENTIDAD JAVRELSTORE
+   Blanco puro, azul eléctrico, sutil iluminación perimetral
+   ======================================================== */
+.javrel-card-luxury {
+  background: #FFFFFF;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  box-shadow: 0 4px 18px -4px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03);
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.javrel-card-luxury:hover {
+  border-color: #0A6CFF;
+  box-shadow:
+    0 20px 42px -10px rgba(10, 108, 255, 0.16),
+    0 0 0 1px rgba(10, 108, 255, 0.35),
+    0 0 24px rgba(10, 108, 255, 0.12);
+  transform: translateY(-4px);
+}
+
+/* Slider de rango azul con rombo corporativo */
+.slider-diamond {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: #E2E8F0;
+  outline: none;
+}
+
+.slider-diamond::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  transform: rotate(45deg);
+  background: #0A6CFF;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 2px 6px rgba(10, 108, 255, 0.45);
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.slider-diamond::-webkit-slider-thumb:hover {
+  background: #0052FF;
+  transform: rotate(45deg) scale(1.15);
+}
+
+.slider-diamond::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  transform: rotate(45deg);
+  background: #0A6CFF;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 2px 6px rgba(10, 108, 255, 0.45);
+  cursor: pointer;
+}
+
 /* update trigger */

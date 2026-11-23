@@ -38,7 +38,7 @@ export const Navbar = ({
   );
 
   return (
-    <header className="relative z-40 w-full transition-all duration-300">
+    <header className="sticky top-0 z-40 w-full transition-all duration-300">
       {/* Barra superior de anuncios */}
       <div className="bg-[#030712] text-white text-xs py-1.5 px-4 shadow-sm font-medium tracking-wide border-b border-white/10">
         <div className="w-full max-w-[1920px] mx-auto flex items-center justify-between">
