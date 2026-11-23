@@ -578,7 +578,7 @@ export const ProductModal = ({
               {/* SECCIÓN IZQUIERDA: GALERÍA VISUAL DOMINANTE CON TECHVIEWER 360° */}
               <div className="lg:col-span-7 flex flex-col gap-3 sm:gap-4">
                 {/* Contenedor Principal del Visor 360° / 3D */}
-                <div className="relative w-full aspect-square sm:aspect-[4/3] lg:aspect-[4/3] bg-gradient-to-b from-slate-50 via-white to-slate-50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 flex items-center justify-center border border-slate-200 shadow-sm overflow-hidden group">
+                <div className="relative w-full aspect-square sm:aspect-[4/3] lg:aspect-[4/3] bg-slate-100 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm overflow-hidden group">
                   
                   {/* Visor Interactivo 360° / Inclinación 3D */}
                   <TechViewer360

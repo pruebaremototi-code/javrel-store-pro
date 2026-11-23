@@ -85,13 +85,13 @@ export const PaymentMethodsSection = () => {
             return (
               <div
                 key={idx}
-                className="group relative p-5 bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:border-[#0A6CFF]/40 hover:shadow-xl transition-all duration-300 transform-gpu hover:-translate-y-1"
+                className="group relative p-6 bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:border-[#0A6CFF]/40 hover:shadow-xl transition-all duration-300 transform-gpu hover:-translate-y-1"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className={`p-2.5 rounded-xl ${m.bg} ${m.color} transition-transform group-hover:scale-110`}>
-                    <Icon className="w-5 h-5" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`p-3 rounded-xl ${m.bg} ${m.color} transition-transform group-hover:scale-110`}>
+                    <Icon className="w-6 h-6" />
                   </div>
-                  <span className="text-[10px] font-mono-code font-bold uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                  <span className="text-[11px] font-mono-code font-bold uppercase tracking-wider text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
                     <EditableText
                       id={`${m.id}_badge`}
                       initialText={m.defaultBadge}
@@ -104,7 +104,7 @@ export const PaymentMethodsSection = () => {
                   id={`${m.id}_title`}
                   initialText={m.defaultTitle}
                   tag="h3"
-                  className="font-display font-semibold text-sm text-slate-900 mb-1.5 block"
+                  className="font-display font-semibold text-base text-slate-900 mb-2 block"
                 />
                 <EditableText
                   id={`${m.id}_desc`}

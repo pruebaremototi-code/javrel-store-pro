@@ -70,10 +70,14 @@ const CART_STORAGE_KEY = 'super_wow_cart_items_v2';
 
 /** Densidad de la grilla del catálogo: tarjetas por fila en desktop. */
 const DENSITY_OPTIONS = [
-  { id: '4', label: '4 tarjetas por fila', cols: 'xl:grid-cols-4' },
-  { id: '5', label: '5 tarjetas por fila', cols: 'xl:grid-cols-5' },
-  { id: '6', label: '6 tarjetas por fila', cols: 'xl:grid-cols-6' },
+  { id: '4', label: '4 tarjetas por fila', cols: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4' },
+  { id: '5', label: '5 tarjetas por fila', cols: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' },
+  { id: '6', label: '6 tarjetas por fila', cols: 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-6' },
 ];
+
+/** Devuelve la clase de columnas Tailwind para la densidad activa. */
+const getDensityCols = (id) =>
+  DENSITY_OPTIONS.find((o) => o.id === id)?.cols ?? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
 
 const DENSITY_STORAGE_KEY = 'javrel_catalog_density';
 
@@ -1093,17 +1097,8 @@ export function App() {
     }
   };
 
-  const densityMinCol = useMemo(() => {
-    switch (gridDensity) {
-      case 'compact':
-        return '210px';
-      case 'spacious':
-        return '290px';
-      case 'normal':
-      default:
-        return '250px';
-    }
-  }, [gridDensity]);
+  /** Clases Tailwind de columnas para la densidad seleccionada (bloqueo fijo). */
+  const densityCols = getDensityCols(gridDensity);
 
   return (
     <VisualEditorProvider
@@ -1333,11 +1328,10 @@ export function App() {
               </div>
             </div>
 
-            {/* Grid de Productos Fluida y Responsiva (.javrel-catalog-grid) */}
+            {/* Grid de Productos con columnas fijas según densidad seleccionada */}
             {filteredProducts.length > 0 ? (
               <div
-                className="javrel-catalog-grid"
-                style={{ '--grid-min-col': densityMinCol }}
+                className={`grid ${densityCols} gap-4 xl:gap-5`}
               >
                 {filteredProducts.map((product) => (
                   <ProductCard

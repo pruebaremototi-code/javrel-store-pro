@@ -48,7 +48,7 @@ export const CategoryIconBar = ({
   return (
     <section className="relative z-10 w-full bg-white/70 backdrop-blur-xl border-y border-slate-200/70 py-3.5 sm:py-4 shadow-xs transition-all">
       <div className="w-full max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
-        <div className="flex items-center justify-start xl:justify-between gap-3 sm:gap-4 md:gap-5 overflow-x-auto no-scrollbar py-1 px-1 scroll-smooth">
+        <div className="flex items-center justify-start xl:justify-between gap-2 sm:gap-3 overflow-x-auto no-scrollbar py-1 px-1 scroll-smooth">
           {TECH_CATEGORY_ICONS.map((cat) => {
             const IconComponent = cat.icon;
             const isSelected =
@@ -63,26 +63,26 @@ export const CategoryIconBar = ({
                   onSelectCategory(nextCategory);
                   if (onCategoryClickScroll) onCategoryClickScroll();
                 }}
-                className={`group flex-shrink-0 flex flex-col items-center justify-center gap-1.5 min-w-[56px] sm:min-w-[64px] transition-all duration-200 cursor-pointer outline-none`}
+                className={`group flex-shrink-0 flex flex-col items-center justify-center gap-1.5 min-w-[68px] sm:min-w-[76px] px-1 transition-all duration-200 cursor-pointer outline-none`}
               >
-                {/* Cuadro de Icono Minimalista Estilo Referencia */}
+                {/* Cuadro de Icono — más grande y compacto */}
                 <div
-                  className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center transition-all duration-200 border ${
+                  className={`w-13 h-13 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center transition-all duration-200 border ${
                     isSelected
-                      ? 'bg-blue-50/90 border-[#0A6CFF] text-[#0A6CFF] shadow-sm shadow-blue-500/15 -translate-y-0.5 ring-2 ring-blue-500/20'
-                      : 'bg-white/80 border-slate-200/90 text-slate-500 hover:text-slate-900 hover:border-slate-300 hover:bg-white hover:-translate-y-0.5 hover:shadow-xs'
+                      ? 'bg-blue-50/90 border-[#0A6CFF] text-[#0A6CFF] shadow-md shadow-blue-500/20 -translate-y-0.5 ring-2 ring-blue-500/25'
+                      : 'bg-white/80 border-slate-200/90 text-slate-500 hover:text-slate-900 hover:border-slate-300 hover:bg-white hover:-translate-y-0.5 hover:shadow-sm'
                   }`}
                 >
                   <IconComponent
-                    className={`w-5 h-5 sm:w-5.5 sm:h-5.5 transition-transform duration-200 ${
+                    className={`w-6 h-6 sm:w-7 sm:h-7 transition-transform duration-200 ${
                       isSelected ? 'scale-105 stroke-[2.2]' : 'group-hover:scale-105 stroke-[1.8]'
                     }`}
                   />
                 </div>
 
-                {/* Título de Categoría Limpio y Minimalista */}
+                {/* Etiqueta más legible */}
                 <span
-                  className={`text-[8.5px] sm:text-[9.5px] font-bold uppercase tracking-wider text-center leading-tight transition-colors ${
+                  className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-wide text-center leading-tight transition-colors ${
                     isSelected
                       ? 'text-[#0A6CFF]'
                       : 'text-slate-500 group-hover:text-slate-900'

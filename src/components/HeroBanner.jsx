@@ -103,22 +103,22 @@ export const HeroBanner = ({
         </div>
 
         {/* Iconos Flotantes Inferiores de Confianza (Glassmorphism Sutil) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4 max-w-3xl mx-auto pt-6 border-t border-white/10">
-          <div className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-white/[0.06] backdrop-blur-md border border-white/10 shadow-sm hover:border-blue-400/50 hover:bg-white/[0.12] transition-all">
-            <ShieldCheck className="w-4 h-4 text-[#38BDF8] flex-shrink-0" />
-            <span className="text-xs font-semibold text-slate-100">100% Originales</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 max-w-3xl mx-auto pt-6 border-t border-white/10">
+          <div className="flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-2xl bg-white/[0.06] backdrop-blur-md border border-white/10 shadow-sm hover:border-blue-400/50 hover:bg-white/[0.12] transition-all">
+            <ShieldCheck className="w-5 h-5 text-[#38BDF8] flex-shrink-0" />
+            <span className="text-sm font-bold text-slate-100">100% Originales</span>
           </div>
-          <div className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-white/[0.06] backdrop-blur-md border border-white/10 shadow-sm hover:border-emerald-400/50 hover:bg-white/[0.12] transition-all">
-            <Truck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <span className="text-xs font-semibold text-slate-100">Envíos Asegurados</span>
+          <div className="flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-2xl bg-white/[0.06] backdrop-blur-md border border-white/10 shadow-sm hover:border-emerald-400/50 hover:bg-white/[0.12] transition-all">
+            <Truck className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <span className="text-sm font-bold text-slate-100">Envíos Asegurados</span>
           </div>
-          <div className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-white/[0.06] backdrop-blur-md border border-white/10 shadow-sm hover:border-amber-400/50 hover:bg-white/[0.12] transition-all">
-            <Award className="w-4 h-4 text-amber-400 flex-shrink-0" />
-            <span className="text-xs font-semibold text-slate-100">Garantía Directa</span>
+          <div className="flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-2xl bg-white/[0.06] backdrop-blur-md border border-white/10 shadow-sm hover:border-amber-400/50 hover:bg-white/[0.12] transition-all">
+            <Award className="w-5 h-5 text-amber-400 flex-shrink-0" />
+            <span className="text-sm font-bold text-slate-100">Garantía Directa</span>
           </div>
-          <div className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-white/[0.06] backdrop-blur-md border border-white/15 shadow-sm hover:border-purple-400/50 hover:bg-white/[0.12] transition-all">
-            <Zap className="w-4 h-4 text-purple-400 flex-shrink-0" />
-            <span className="text-xs font-semibold text-slate-100">Despacho 24h</span>
+          <div className="flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-2xl bg-white/[0.06] backdrop-blur-md border border-white/15 shadow-sm hover:border-purple-400/50 hover:bg-white/[0.12] transition-all">
+            <Zap className="w-5 h-5 text-purple-400 flex-shrink-0" />
+            <span className="text-sm font-bold text-slate-100">Despacho 24h</span>
           </div>
         </div>
       </div>
