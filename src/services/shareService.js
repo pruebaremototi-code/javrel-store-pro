@@ -1,4 +1,5 @@
 import { formatCurrency } from './storeService';
+import { getProductSlug } from './textUtils';
 
 /**
  * Generación de enlaces y copys comerciales para el Centro de Difusión.
@@ -6,7 +7,7 @@ import { formatCurrency } from './storeService';
  * el mismo precio, descripción y enlace canónico del producto.
  */
 
-const FALLBACK_ORIGIN = 'https://javrelstore.vercel.app';
+const FALLBACK_ORIGIN = 'https://www.javrelstore.shop';
 export const TIKTOK_UPLOAD_URL = 'https://www.tiktok.com/upload?lang=es';
 export const MESSENGER_HOME_URL = 'https://www.messenger.com/';
 
@@ -17,19 +18,23 @@ export const getShareOrigin = () => {
   if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
     return origin;
   }
+  // En producción priorizar el dominio canónico de marca https://www.javrelstore.shop
+  if (origin.includes('javrelstore.shop') || origin.includes('vercel.app')) {
+    return 'https://www.javrelstore.shop';
+  }
   return origin.replace(/^http:\/\//i, 'https://');
 };
 
 /**
- * URL canónica del producto: /p/:id.
- * Es el endpoint público de la ficha completa (Open Graph + ficha interactiva),
- * sin parámetros intermedios ni variantes locales.
+ * URL canónica del producto: /p/:slug (con retrocompatibilidad para /p/:id).
+ * Genera enlaces limpios, profesionales y amigables basados en el nombre
+ * o referencia del producto (ej. https://www.javrelstore.shop/p/xbox-series-s-1tb-sdd).
  */
 export const buildProductShareUrl = (product) => {
-  const id = String(product?.id || '').trim();
   const origin = getShareOrigin();
-  if (!id) return `${origin}/`;
-  return `${origin}/p/${encodeURIComponent(id)}`;
+  const slug = getProductSlug(product);
+  if (!slug) return `${origin}/`;
+  return `${origin}/p/${encodeURIComponent(slug)}`;
 };
 
 export const getAbsoluteImageUrl = (image) => {

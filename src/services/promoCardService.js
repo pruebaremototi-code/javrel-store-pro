@@ -1,5 +1,5 @@
 import { formatCurrency } from './storeService';
-import { sanitizeCommercialText } from './textUtils';
+import { sanitizeCommercialText, cleanBrand, getProductSlug } from './textUtils';
 
 /**
  * Motor de tarjetas promocionales para el Centro de Difusión.
@@ -1870,250 +1870,775 @@ const drawGuarantee = (ctx, x, y, text, palette, fontSize, glassEffect = true) =
 };
 
 const drawSquare = (ctx, width, height, data, palette, image, logo, glassEffect = true) => {
-  const pad = 56;
-  drawHeader(ctx, pad, 52, width - pad * 2, data, palette, {
-    mark: 54,
-    store: 30,
-    badge: 17,
-  }, logo);
-  drawImageCard(ctx, pad, 128, width - pad * 2, 452, 46, image, data, palette);
-  
-  if (glassEffect) {
-    drawGlassPanel(ctx, 40, 612, width - 80, 448, 42, palette);
+  const pad = 44;
+  const cardW = width - pad * 2;
+  const cardH = height - pad * 2;
+  const radius = 36;
+  const isDark = palette.isDark;
+
+  // Fondo de la tarjeta con sombra perimetral suave
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.18)';
+  ctx.shadowBlur = 36;
+  ctx.shadowOffsetY = 16;
+  fillRoundRect(ctx, pad, pad, cardW, cardH, radius, isDark ? palette.bgFrom : '#FFFFFF');
+  ctx.restore();
+
+  // Borde exterior sutil
+  ctx.save();
+  roundRect(ctx, pad, pad, cardW, cardH, radius);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.15)' : '#E2E8F0';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Recortar al contenedor
+  ctx.save();
+  roundRect(ctx, pad, pad, cardW, cardH, radius);
+  ctx.clip();
+
+  // 1. Imagen Superior Protagónica
+  const imgBoxH = 560;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(pad, pad, cardW, imgBoxH);
+
+  if (image && image.width && image.height) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const padding = 36;
+    const scale = Math.min((cardW - padding * 2) / image.width, (imgBoxH - padding * 2) / image.height);
+    const drawW = image.width * scale;
+    const drawH = image.height * scale;
+    ctx.drawImage(image, pad + (cardW - drawW) / 2, pad + (imgBoxH - drawH) / 2, drawW, drawH);
+    ctx.restore();
   }
 
-  // Motor Inteligente de Contraste Tipográfico de Alta Definición
+  // Divisor inferior de la imagen
+  ctx.beginPath();
+  ctx.moveTo(pad, pad + imgBoxH);
+  ctx.lineTo(pad + cardW, pad + imgBoxH);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Badges sobre la imagen
+  if (data.discount > 0) {
+    const badgeText = `-${data.discount}%`;
+    ctx.save();
+    ctx.font = `800 24px ${FONT_HEAD}`;
+    const bW = ctx.measureText(badgeText).width + 24;
+    fillRoundRect(ctx, pad + 24, pad + 24, bW, 44, 12, '#0A6CFF');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(badgeText, pad + 24 + bW / 2, pad + 24 + 23);
+    ctx.restore();
+  }
+
+  // Contador de fotos
   ctx.save();
-  applySharpTextShadow(ctx, palette, 'title');
+  ctx.font = `700 20px ${FONT_HEAD}`;
+  fillRoundRect(ctx, pad + cardW - 80, pad + 24, 56, 38, 10, 'rgba(15,23,42,0.7)');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('📷 2', pad + cardW - 52, pad + 24 + 20);
+  ctx.restore();
+
+  // 2. Fila Marca y Calificación
+  const contentPad = pad + 36;
+  const contentW = cardW - 72;
+  const brandY = pad + imgBoxH + 46;
+
+  ctx.save();
+  ctx.font = `800 24px ${FONT_HEAD}`;
+  ctx.fillStyle = '#0A6CFF';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(data.brand.toUpperCase(), contentPad, brandY);
+
+  // Rating
+  ctx.fillStyle = '#F59E0B';
+  ctx.textAlign = 'right';
+  ctx.fillText(`★ ${data.rating} 0`, contentPad + contentW, brandY);
+  ctx.restore();
+
+  // 3. Título del producto
+  const titleY = brandY + 34;
   drawWrappedText(
     ctx,
     data.productName,
-    pad,
-    650,
-    width - pad * 2,
-    60,
+    contentPad,
+    titleY,
+    contentW,
+    44,
     2,
-    `800 52px ${FONT_HEAD}`,
-    palette.isDark ? '#FFFFFF' : palette.text
+    `800 36px ${FONT_HEAD}`,
+    isDark ? '#FFFFFF' : '#0F172A'
   );
 
-  applySharpTextShadow(ctx, palette, 'body');
+  // 4. Descripción corta (2 líneas)
+  const descY = titleY + 98;
   drawWrappedText(
     ctx,
-    data.description,
-    pad,
-    760,
-    width - pad * 2,
-    36,
+    data.description || 'Dispositivo Tecnológico Inteligente diseñado para ofrecer el máximo rendimiento.',
+    contentPad,
+    descY,
+    contentW,
+    30,
     2,
-    glassEffect ? `600 28px ${FONT_BODY}` : `700 28px ${FONT_BODY}`,
-    palette.isDark ? 'rgba(255,255,255,0.95)' : palette.muted
+    `600 22px ${FONT_BODY}`,
+    isDark ? 'rgba(255,255,255,0.7)' : '#64748B'
   );
+
+  // 5. Insignia / Detalle técnico con check verde
+  const specY = descY + 74;
+  ctx.save();
+  ctx.font = `700 22px ${FONT_HEAD}`;
+  ctx.fillStyle = '#059669';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`✓ ${data.specHighlight}`, contentPad, specY);
   ctx.restore();
 
-  drawPriceRow(ctx, pad, 868, data, palette, { offer: 64, regular: 28 }, glassEffect);
+  // Divisor para precios
+  const priceDivY = specY + 28;
+  ctx.beginPath();
+  ctx.moveTo(contentPad, priceDivY);
+  ctx.lineTo(contentPad + contentW, priceDivY);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 
-  drawCta(ctx, pad, 912, 410, 82, data.ctaText, palette, 30);
-  drawGuarantee(ctx, pad, 1010, data.guaranteeText, palette, 22, glassEffect);
+  // 6. Precios
+  const priceY = priceDivY + 38;
+  ctx.save();
+  ctx.font = `900 48px ${FONT_HEAD}`;
+  ctx.fillStyle = isDark ? '#FFFFFF' : '#0F172A';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const offerStr = formatCurrency(data.offer);
+  ctx.fillText(offerStr, contentPad, priceY);
+  const offerW = ctx.measureText(offerStr).width;
+
+  if (data.hasRegular) {
+    const regStr = formatCurrency(data.regular);
+    ctx.font = `700 26px ${FONT_HEAD}`;
+    ctx.fillStyle = '#94A3B8';
+    const regX = contentPad + offerW + 20;
+    ctx.fillText(regStr, regX, priceY + 2);
+    const regW = ctx.measureText(regStr).width;
+    ctx.beginPath();
+    ctx.moveTo(regX, priceY + 2);
+    ctx.lineTo(regX + regW, priceY + 2);
+    ctx.strokeStyle = '#94A3B8';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 7. Franja de enlace al pie
+  const footerDivY = pad + cardH - 58;
+  ctx.beginPath();
+  ctx.moveTo(contentPad, footerDivY);
+  ctx.lineTo(contentPad + contentW, footerDivY);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  const footerY = footerDivY + 30;
+  ctx.save();
+  ctx.font = `600 20px ${FONT_BODY}`;
+  ctx.fillStyle = '#64748B';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`javrelstore.shop/p/${data.slug}`, contentPad, footerY);
+
+  ctx.font = `800 20px ${FONT_HEAD}`;
+  ctx.fillStyle = '#0A6CFF';
+  ctx.textAlign = 'right';
+  ctx.fillText('● JavrelStore', contentPad + contentW, footerY);
+  ctx.restore();
+
+  ctx.restore(); // fin clip
 };
 
 const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect = true) => {
-  const pad = 52;
-  drawHeader(ctx, pad, 48, width - pad * 2, data, palette, {
-    mark: 64,
-    store: 34,
-    badge: 18,
-  }, logo);
-  // Imagen mucho más amplia y dominante en 9:16
-  drawImageCard(ctx, pad, 132, width - pad * 2, 888, 56, image, data, palette);
-  
-  if (glassEffect) {
-    drawGlassPanel(ctx, 36, 1036, width - 72, 836, 48, palette);
-  }
-
-  // Motor Inteligente de Contraste Tipográfico de Alta Definición
-  ctx.save();
-  applySharpTextShadow(ctx, palette, 'title');
-  drawWrappedText(
-    ctx,
-    data.productName,
-    pad,
-    1096,
-    width - pad * 2,
-    72,
-    3,
-    `800 64px ${FONT_HEAD}`,
-    palette.isDark ? '#FFFFFF' : palette.text
-  );
-
-  applySharpTextShadow(ctx, palette, 'body');
-  drawWrappedText(
-    ctx,
-    data.description,
-    pad,
-    1280,
-    width - pad * 2,
-    44,
-    3,
-    glassEffect ? `600 34px ${FONT_BODY}` : `700 34px ${FONT_BODY}`,
-    palette.isDark ? 'rgba(255,255,255,0.95)' : palette.muted
-  );
-  ctx.restore();
-
-  drawPriceRow(ctx, pad, 1490, data, palette, { offer: 78, regular: 34 }, glassEffect);
-
-  drawCta(ctx, pad, 1605, 560, 110, data.ctaText, palette, 36);
-  drawGuarantee(ctx, pad, 1795, data.guaranteeText, palette, 26, glassEffect);
-};
-
-const drawLandscape = (ctx, width, height, data, palette, image, logo, glassEffect = true) => {
   const pad = 48;
-  drawHeader(ctx, pad, 38, width - pad * 2, data, palette, {
-    mark: 46,
-    store: 26,
-    badge: 15,
-  }, logo);
-  drawImageCard(ctx, pad, 108, 434, 434, 44, image, data, palette);
+  const cardW = width - pad * 2;
+  const cardH = height - pad * 2;
+  const radius = 42;
+  const isDark = palette.isDark;
 
-  const contentX = pad + 434 + 32;
-  const contentWidth = width - contentX - pad;
-  
-  if (glassEffect) {
-    drawGlassPanel(ctx, contentX - 22, 116, contentWidth + 44, 466, 38, palette);
+  // Fondo de la tarjeta con sombra perimetral
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.22)';
+  ctx.shadowBlur = 48;
+  ctx.shadowOffsetY = 20;
+  fillRoundRect(ctx, pad, pad, cardW, cardH, radius, isDark ? palette.bgFrom : '#FFFFFF');
+  ctx.restore();
+
+  // Borde exterior
+  ctx.save();
+  roundRect(ctx, pad, pad, cardW, cardH, radius);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.15)' : '#E2E8F0';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+
+  // Recortar al contenedor
+  ctx.save();
+  roundRect(ctx, pad, pad, cardW, cardH, radius);
+  ctx.clip();
+
+  // 1. Imagen Superior Protagónica 9:16 (h ≈ 1080px)
+  const imgBoxH = 1080;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(pad, pad, cardW, imgBoxH);
+
+  if (image && image.width && image.height) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const padding = 48;
+    const scale = Math.min((cardW - padding * 2) / image.width, (imgBoxH - padding * 2) / image.height);
+    const drawW = image.width * scale;
+    const drawH = image.height * scale;
+    ctx.drawImage(image, pad + (cardW - drawW) / 2, pad + (imgBoxH - drawH) / 2, drawW, drawH);
+    ctx.restore();
   }
 
-  // Motor Inteligente de Contraste Tipográfico de Alta Definición
+  // Divisor inferior de la imagen
+  ctx.beginPath();
+  ctx.moveTo(pad, pad + imgBoxH);
+  ctx.lineTo(pad + cardW, pad + imgBoxH);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // Badges sobre la imagen
+  if (data.discount > 0) {
+    const badgeText = `-${data.discount}%`;
+    ctx.save();
+    ctx.font = `800 32px ${FONT_HEAD}`;
+    const bW = ctx.measureText(badgeText).width + 32;
+    fillRoundRect(ctx, pad + 32, pad + 32, bW, 58, 16, '#0A6CFF');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(badgeText, pad + 32 + bW / 2, pad + 32 + 30);
+    ctx.restore();
+  }
+
   ctx.save();
-  applySharpTextShadow(ctx, palette, 'title');
+  ctx.font = `700 26px ${FONT_HEAD}`;
+  fillRoundRect(ctx, pad + cardW - 110, pad + 32, 78, 48, 12, 'rgba(15,23,42,0.7)');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('📷 2', pad + cardW - 71, pad + 32 + 25);
+  ctx.restore();
+
+  // 2. Fila Marca y Calificación
+  const contentPad = pad + 48;
+  const contentW = cardW - 96;
+  const brandY = pad + imgBoxH + 64;
+
+  ctx.save();
+  ctx.font = `800 32px ${FONT_HEAD}`;
+  ctx.fillStyle = '#0A6CFF';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(data.brand.toUpperCase(), contentPad, brandY);
+
+  ctx.fillStyle = '#F59E0B';
+  ctx.textAlign = 'right';
+  ctx.fillText(`★ ${data.rating} 0`, contentPad + contentW, brandY);
+  ctx.restore();
+
+  // 3. Título del producto
+  const titleY = brandY + 46;
   drawWrappedText(
     ctx,
     data.productName,
-    contentX,
-    178,
-    contentWidth,
-    56,
+    contentPad,
+    titleY,
+    contentW,
+    62,
     2,
-    `800 46px ${FONT_HEAD}`,
-    palette.isDark ? '#FFFFFF' : palette.text
+    `800 52px ${FONT_HEAD}`,
+    isDark ? '#FFFFFF' : '#0F172A'
   );
 
-  applySharpTextShadow(ctx, palette, 'body');
+  // 4. Descripción corta (2 líneas)
+  const descY = titleY + 140;
   drawWrappedText(
     ctx,
-    data.description,
-    contentX,
-    300,
-    contentWidth,
-    34,
+    data.description || 'Dispositivo Tecnológico Inteligente diseñado para ofrecer el máximo rendimiento.',
+    contentPad,
+    descY,
+    contentW,
+    42,
     2,
-    glassEffect ? `600 26px ${FONT_BODY}` : `700 26px ${FONT_BODY}`,
-    palette.isDark ? 'rgba(255,255,255,0.95)' : palette.muted
+    `600 30px ${FONT_BODY}`,
+    isDark ? 'rgba(255,255,255,0.7)' : '#64748B'
   );
+
+  // 5. Insignia / Detalle técnico con check verde
+  const specY = descY + 104;
+  ctx.save();
+  ctx.font = `800 30px ${FONT_HEAD}`;
+  ctx.fillStyle = '#059669';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`✓ ${data.specHighlight}`, contentPad, specY);
   ctx.restore();
 
-  drawPriceRow(ctx, contentX, 420, data, palette, { offer: 58, regular: 26 }, glassEffect);
+  // Divisor para precios
+  const priceDivY = specY + 44;
+  ctx.beginPath();
+  ctx.moveTo(contentPad, priceDivY);
+  ctx.lineTo(contentPad + contentW, priceDivY);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 2;
+  ctx.stroke();
 
-  drawCta(ctx, contentX, 470, 360, 74, data.ctaText, palette, 28);
-  drawGuarantee(ctx, contentX, 564, data.guaranteeText, palette, 20, glassEffect);
+  // 6. Precios
+  const priceY = priceDivY + 54;
+  ctx.save();
+  ctx.font = `900 68px ${FONT_HEAD}`;
+  ctx.fillStyle = isDark ? '#FFFFFF' : '#0F172A';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const offerStr = formatCurrency(data.offer);
+  ctx.fillText(offerStr, contentPad, priceY);
+  const offerW = ctx.measureText(offerStr).width;
+
+  if (data.hasRegular) {
+    const regStr = formatCurrency(data.regular);
+    ctx.font = `700 36px ${FONT_HEAD}`;
+    ctx.fillStyle = '#94A3B8';
+    const regX = contentPad + offerW + 28;
+    ctx.fillText(regStr, regX, priceY + 4);
+    const regW = ctx.measureText(regStr).width;
+    ctx.beginPath();
+    ctx.moveTo(regX, priceY + 4);
+    ctx.lineTo(regX + regW, priceY + 4);
+    ctx.strokeStyle = '#94A3B8';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 7. Franja de enlace al pie
+  const footerDivY = pad + cardH - 84;
+  ctx.beginPath();
+  ctx.moveTo(contentPad, footerDivY);
+  ctx.lineTo(contentPad + contentW, footerDivY);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const footerY = footerDivY + 44;
+  ctx.save();
+  ctx.font = `600 26px ${FONT_BODY}`;
+  ctx.fillStyle = '#64748B';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`javrelstore.shop/p/${data.slug}`, contentPad, footerY);
+
+  ctx.font = `800 26px ${FONT_HEAD}`;
+  ctx.fillStyle = '#0A6CFF';
+  ctx.textAlign = 'right';
+  ctx.fillText('● JavrelStore', contentPad + contentW, footerY);
+  ctx.restore();
+
+  ctx.restore();
 };
 
 const drawPortrait = (ctx, width, height, data, palette, image, logo, glassEffect = true) => {
-  const pad = 58;
-  drawHeader(ctx, pad, 56, width - pad * 2, data, palette, {
-    mark: 58,
-    store: 32,
-    badge: 18,
-  }, logo);
-  drawImageCard(ctx, pad, 142, width - pad * 2, 570, 50, image, data, palette);
-  
-  if (glassEffect) {
-    drawGlassPanel(ctx, 42, 736, width - 84, 566, 44, palette);
+  const pad = 46;
+  const cardW = width - pad * 2;
+  const cardH = height - pad * 2;
+  const radius = 38;
+  const isDark = palette.isDark;
+
+  // Fondo de la tarjeta con sombra perimetral
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.2)';
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 18;
+  fillRoundRect(ctx, pad, pad, cardW, cardH, radius, isDark ? palette.bgFrom : '#FFFFFF');
+  ctx.restore();
+
+  // Borde exterior
+  ctx.save();
+  roundRect(ctx, pad, pad, cardW, cardH, radius);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.15)' : '#E2E8F0';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Recortar al contenedor
+  ctx.save();
+  roundRect(ctx, pad, pad, cardW, cardH, radius);
+  ctx.clip();
+
+  // 1. Imagen Superior Protagónica 4:5 (h ≈ 740px)
+  const imgBoxH = 740;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(pad, pad, cardW, imgBoxH);
+
+  if (image && image.width && image.height) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const padding = 40;
+    const scale = Math.min((cardW - padding * 2) / image.width, (imgBoxH - padding * 2) / image.height);
+    const drawW = image.width * scale;
+    const drawH = image.height * scale;
+    ctx.drawImage(image, pad + (cardW - drawW) / 2, pad + (imgBoxH - drawH) / 2, drawW, drawH);
+    ctx.restore();
   }
 
-  // Motor Inteligente de Contraste Tipográfico de Alta Definición
+  // Divisor inferior de la imagen
+  ctx.beginPath();
+  ctx.moveTo(pad, pad + imgBoxH);
+  ctx.lineTo(pad + cardW, pad + imgBoxH);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Badges sobre imagen
+  if (data.discount > 0) {
+    const badgeText = `-${data.discount}%`;
+    ctx.save();
+    ctx.font = `800 26px ${FONT_HEAD}`;
+    const bW = ctx.measureText(badgeText).width + 26;
+    fillRoundRect(ctx, pad + 26, pad + 26, bW, 48, 14, '#0A6CFF');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(badgeText, pad + 26 + bW / 2, pad + 26 + 25);
+    ctx.restore();
+  }
+
   ctx.save();
-  applySharpTextShadow(ctx, palette, 'title');
+  ctx.font = `700 22px ${FONT_HEAD}`;
+  fillRoundRect(ctx, pad + cardW - 90, pad + 26, 64, 42, 10, 'rgba(15,23,42,0.7)');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('📷 2', pad + cardW - 58, pad + 26 + 22);
+  ctx.restore();
+
+  // 2. Fila Marca y Calificación
+  const contentPad = pad + 40;
+  const contentW = cardW - 80;
+  const brandY = pad + imgBoxH + 52;
+
+  ctx.save();
+  ctx.font = `800 26px ${FONT_HEAD}`;
+  ctx.fillStyle = '#0A6CFF';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(data.brand.toUpperCase(), contentPad, brandY);
+
+  ctx.fillStyle = '#F59E0B';
+  ctx.textAlign = 'right';
+  ctx.fillText(`★ ${data.rating} 0`, contentPad + contentW, brandY);
+  ctx.restore();
+
+  // 3. Título del producto
+  const titleY = brandY + 38;
   drawWrappedText(
     ctx,
     data.productName,
-    pad,
-    780,
-    width - pad * 2,
-    64,
+    contentPad,
+    titleY,
+    contentW,
+    48,
     2,
-    `800 56px ${FONT_HEAD}`,
-    palette.isDark ? '#FFFFFF' : palette.text
+    `800 40px ${FONT_HEAD}`,
+    isDark ? '#FFFFFF' : '#0F172A'
   );
 
-  applySharpTextShadow(ctx, palette, 'body');
+  // 4. Descripción corta (2 líneas)
+  const descY = titleY + 108;
   drawWrappedText(
     ctx,
-    data.description,
-    pad,
-    916,
-    width - pad * 2,
-    38,
+    data.description || 'Dispositivo Tecnológico Inteligente diseñado para ofrecer el máximo rendimiento.',
+    contentPad,
+    descY,
+    contentW,
+    32,
     2,
-    glassEffect ? `600 30px ${FONT_BODY}` : `700 30px ${FONT_BODY}`,
-    palette.isDark ? 'rgba(255,255,255,0.95)' : palette.muted
+    `600 24px ${FONT_BODY}`,
+    isDark ? 'rgba(255,255,255,0.7)' : '#64748B'
   );
+
+  // 5. Insignia / Detalle técnico con check verde
+  const specY = descY + 80;
+  ctx.save();
+  ctx.font = `800 24px ${FONT_HEAD}`;
+  ctx.fillStyle = '#059669';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`✓ ${data.specHighlight}`, contentPad, specY);
   ctx.restore();
 
-  drawPriceRow(ctx, pad, 1038, data, palette, { offer: 68, regular: 30 }, glassEffect);
+  // Divisor para precios
+  const priceDivY = specY + 32;
+  ctx.beginPath();
+  ctx.moveTo(contentPad, priceDivY);
+  ctx.lineTo(contentPad + contentW, priceDivY);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 
-  drawCta(ctx, pad, 1092, 440, 88, data.ctaText, palette, 32);
-  drawGuarantee(ctx, pad, 1210, data.guaranteeText, palette, 23, glassEffect);
+  // 6. Precios
+  const priceY = priceDivY + 44;
+  ctx.save();
+  ctx.font = `900 54px ${FONT_HEAD}`;
+  ctx.fillStyle = isDark ? '#FFFFFF' : '#0F172A';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const offerStr = formatCurrency(data.offer);
+  ctx.fillText(offerStr, contentPad, priceY);
+  const offerW = ctx.measureText(offerStr).width;
+
+  if (data.hasRegular) {
+    const regStr = formatCurrency(data.regular);
+    ctx.font = `700 30px ${FONT_HEAD}`;
+    ctx.fillStyle = '#94A3B8';
+    const regX = contentPad + offerW + 22;
+    ctx.fillText(regStr, regX, priceY + 3);
+    const regW = ctx.measureText(regStr).width;
+    ctx.beginPath();
+    ctx.moveTo(regX, priceY + 3);
+    ctx.lineTo(regX + regW, priceY + 3);
+    ctx.strokeStyle = '#94A3B8';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 7. Franja de enlace al pie
+  const footerDivY = pad + cardH - 68;
+  ctx.beginPath();
+  ctx.moveTo(contentPad, footerDivY);
+  ctx.lineTo(contentPad + contentW, footerDivY);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  const footerY = footerDivY + 35;
+  ctx.save();
+  ctx.font = `600 22px ${FONT_BODY}`;
+  ctx.fillStyle = '#64748B';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`javrelstore.shop/p/${data.slug}`, contentPad, footerY);
+
+  ctx.font = `800 22px ${FONT_HEAD}`;
+  ctx.fillStyle = '#0A6CFF';
+  ctx.textAlign = 'right';
+  ctx.fillText('● JavrelStore', contentPad + contentW, footerY);
+  ctx.restore();
+
+  ctx.restore();
+};
+
+const drawLandscape = (ctx, width, height, data, palette, image, logo, glassEffect = true) => {
+  const pad = 40;
+  const cardW = width - pad * 2;
+  const cardH = height - pad * 2;
+  const radius = 32;
+  const isDark = palette.isDark;
+
+  // Fondo de la tarjeta con sombra perimetral
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.18)';
+  ctx.shadowBlur = 36;
+  ctx.shadowOffsetY = 16;
+  fillRoundRect(ctx, pad, pad, cardW, cardH, radius, isDark ? palette.bgFrom : '#FFFFFF');
+  ctx.restore();
+
+  // Borde exterior
+  ctx.save();
+  roundRect(ctx, pad, pad, cardW, cardH, radius);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.15)' : '#E2E8F0';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Recortar al contenedor
+  ctx.save();
+  roundRect(ctx, pad, pad, cardW, cardH, radius);
+  ctx.clip();
+
+  // Disposición en 2 columnas: Columna izquierda = Imagen cuadrada (520x520)
+  const imgBoxW = Math.min(cardH, 520);
+  const imgBoxH = cardH;
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(pad, pad, imgBoxW, imgBoxH);
+
+  if (image && image.width && image.height) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    const padding = 32;
+    const scale = Math.min((imgBoxW - padding * 2) / image.width, (imgBoxH - padding * 2) / image.height);
+    const drawW = image.width * scale;
+    const drawH = image.height * scale;
+    ctx.drawImage(image, pad + (imgBoxW - drawW) / 2, pad + (imgBoxH - drawH) / 2, drawW, drawH);
+    ctx.restore();
+  }
+
+  // Divisor vertical entre imagen y contenido
+  ctx.beginPath();
+  ctx.moveTo(pad + imgBoxW, pad);
+  ctx.lineTo(pad + imgBoxW, pad + cardH);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Badge descuento
+  if (data.discount > 0) {
+    const badgeText = `-${data.discount}%`;
+    ctx.save();
+    ctx.font = `800 22px ${FONT_HEAD}`;
+    const bW = ctx.measureText(badgeText).width + 22;
+    fillRoundRect(ctx, pad + 20, pad + 20, bW, 40, 10, '#0A6CFF');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(badgeText, pad + 20 + bW / 2, pad + 20 + 21);
+    ctx.restore();
+  }
+
+  // Columna Derecha: Contenido
+  const contentPad = pad + imgBoxW + 36;
+  const contentW = cardW - imgBoxW - 68;
+
+  // 1. Marca y Rating
+  const brandY = pad + 48;
+  ctx.save();
+  ctx.font = `800 24px ${FONT_HEAD}`;
+  ctx.fillStyle = '#0A6CFF';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(data.brand.toUpperCase(), contentPad, brandY);
+
+  ctx.fillStyle = '#F59E0B';
+  ctx.textAlign = 'right';
+  ctx.fillText(`★ ${data.rating} 0`, contentPad + contentW, brandY);
+  ctx.restore();
+
+  // 2. Título
+  const titleY = brandY + 34;
+  drawWrappedText(
+    ctx,
+    data.productName,
+    contentPad,
+    titleY,
+    contentW,
+    44,
+    2,
+    `800 36px ${FONT_HEAD}`,
+    isDark ? '#FFFFFF' : '#0F172A'
+  );
+
+  // 3. Descripción
+  const descY = titleY + 96;
+  drawWrappedText(
+    ctx,
+    data.description || 'Dispositivo Tecnológico Inteligente diseñado para ofrecer el máximo rendimiento.',
+    contentPad,
+    descY,
+    contentW,
+    30,
+    2,
+    `600 20px ${FONT_BODY}`,
+    isDark ? 'rgba(255,255,255,0.7)' : '#64748B'
+  );
+
+  // 4. Insignia
+  const specY = descY + 70;
+  ctx.save();
+  ctx.font = `800 22px ${FONT_HEAD}`;
+  ctx.fillStyle = '#059669';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`✓ ${data.specHighlight}`, contentPad, specY);
+  ctx.restore();
+
+  // 5. Precios
+  const priceDivY = specY + 28;
+  ctx.beginPath();
+  ctx.moveTo(contentPad, priceDivY);
+  ctx.lineTo(contentPad + contentW, priceDivY);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  const priceY = priceDivY + 38;
+  ctx.save();
+  ctx.font = `900 48px ${FONT_HEAD}`;
+  ctx.fillStyle = isDark ? '#FFFFFF' : '#0F172A';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const offerStr = formatCurrency(data.offer);
+  ctx.fillText(offerStr, contentPad, priceY);
+  const offerW = ctx.measureText(offerStr).width;
+
+  if (data.hasRegular) {
+    const regStr = formatCurrency(data.regular);
+    ctx.font = `700 26px ${FONT_HEAD}`;
+    ctx.fillStyle = '#94A3B8';
+    const regX = contentPad + offerW + 20;
+    ctx.fillText(regStr, regX, priceY + 2);
+    const regW = ctx.measureText(regStr).width;
+    ctx.beginPath();
+    ctx.moveTo(regX, priceY + 2);
+    ctx.lineTo(regX + regW, priceY + 2);
+    ctx.strokeStyle = '#94A3B8';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 6. Footer strip
+  const footerDivY = pad + cardH - 52;
+  ctx.beginPath();
+  ctx.moveTo(contentPad, footerDivY);
+  ctx.lineTo(contentPad + contentW, footerDivY);
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  const footerY = footerDivY + 26;
+  ctx.save();
+  ctx.font = `600 18px ${FONT_BODY}`;
+  ctx.fillStyle = '#64748B';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`javrelstore.shop/p/${data.slug}`, contentPad, footerY);
+
+  ctx.font = `800 18px ${FONT_HEAD}`;
+  ctx.fillStyle = '#0A6CFF';
+  ctx.textAlign = 'right';
+  ctx.fillText('● JavrelStore', contentPad + contentW, footerY);
+  ctx.restore();
+
+  ctx.restore();
 };
 
 const drawPanoramic = (ctx, width, height, data, palette, image, logo, glassEffect = true) => {
-  const pad = 48;
-  drawHeader(ctx, pad, 36, width - pad * 2, data, palette, {
-    mark: 48,
-    store: 28,
-    badge: 16,
-  }, logo);
-  drawImageCard(ctx, pad, 104, 466, 466, 44, image, data, palette);
-
-  const contentX = pad + 466 + 36;
-  const contentWidth = width - contentX - pad;
-  
-  if (glassEffect) {
-    drawGlassPanel(ctx, contentX - 22, 110, contentWidth + 44, 498, 40, palette);
-  }
-
-  // Motor Inteligente de Contraste Tipográfico de Alta Definición
-  ctx.save();
-  applySharpTextShadow(ctx, palette, 'title');
-  drawWrappedText(
-    ctx,
-    data.productName,
-    contentX,
-    174,
-    contentWidth,
-    58,
-    2,
-    `800 48px ${FONT_HEAD}`,
-    palette.isDark ? '#FFFFFF' : palette.text
-  );
-
-  applySharpTextShadow(ctx, palette, 'body');
-  drawWrappedText(
-    ctx,
-    data.description,
-    contentX,
-    306,
-    contentWidth,
-    36,
-    2,
-    glassEffect ? `600 28px ${FONT_BODY}` : `700 28px ${FONT_BODY}`,
-    palette.isDark ? 'rgba(255,255,255,0.95)' : palette.muted
-  );
-  ctx.restore();
-
-  drawPriceRow(ctx, contentX, 436, data, palette, { offer: 62, regular: 28 }, glassEffect);
-
-  drawCta(ctx, contentX, 492, 380, 78, data.ctaText, palette, 28);
-  drawGuarantee(ctx, contentX, 592, data.guaranteeText, palette, 21, glassEffect);
+  // Panorámico 16:9 usa la misma distribución de 2 columnas de Landscape
+  drawLandscape(ctx, width, height, data, palette, image, logo, glassEffect);
 };
 
 const buildCardData = (product, config, ctaText, badgeConfig = null) => {
@@ -2144,14 +2669,42 @@ const buildCardData = (product, config, ctaText, badgeConfig = null) => {
     desc = cleanSpecs.slice(0, 2).join(' · ');
   }
 
-  const origin = typeof window !== 'undefined' ? (window.location.origin || 'https://javrelstore.vercel.app') : 'https://javrelstore.vercel.app';
-  const storeDomain = origin.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+  const origin = typeof window !== 'undefined' ? (window.location.origin || 'https://www.javrelstore.shop') : 'https://www.javrelstore.shop';
+  const storeDomain = 'javrelstore.shop';
+  const slug = getProductSlug(product);
+  const brand = cleanBrand(product?.brand) || 'JAVRELSTORE';
+  const rating = Number(product?.rating || 5).toFixed(0);
+
+  let specHighlight = '';
+  if (Array.isArray(product?.specs) && product.specs.length > 0) {
+    for (const s of product.specs) {
+      if (typeof s === 'string') {
+        const clean = s.replace(/\[object Object\]/g, '').trim();
+        if (clean && !/^(CONDICI|ETIQUETA|SKU|EAN|BARCODE|COSTO)/i.test(clean)) {
+          specHighlight = clean;
+          break;
+        }
+      } else if (typeof s === 'object' && s !== null) {
+        const k = String(s.title || s.key || '').trim();
+        const v = String(s.detail !== undefined ? s.detail : s.value !== undefined ? s.value : '')
+          .replace(/\[object Object\]/g, '')
+          .trim();
+        if (v && !/^(CONDICI|ETIQUETA|SKU|EAN|BARCODE|COSTO)/i.test(k)) {
+          specHighlight = k ? `${k}: ${v}` : v;
+          break;
+        }
+      }
+    }
+  }
+  if (!specHighlight) {
+    specHighlight = String(product?.condition && product.condition !== 'Nuevo' ? product.condition : 'NUEVO').toUpperCase();
+  }
 
   return {
     storeName: String(config?.storeName || 'JavrelStore').trim(),
     storeDomain,
     productName: String(product?.name || 'Producto destacado').trim(),
-    brand: String(product?.brand || '').trim(),
+    brand,
     condition: String(product?.condition || 'Nuevo').trim(),
     commercialTag: String(product?.commercialTag || product?.badge || '').trim(),
     description: desc,
@@ -2159,6 +2712,9 @@ const buildCardData = (product, config, ctaText, badgeConfig = null) => {
     regular,
     hasRegular,
     discount,
+    rating,
+    slug,
+    specHighlight,
     ctaText: String(ctaText || 'Ver en Tienda').trim(),
     guaranteeText: String(
       config?.guaranteeText ||

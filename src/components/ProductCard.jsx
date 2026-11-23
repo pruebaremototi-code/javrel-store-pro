@@ -17,10 +17,12 @@ import { useVisualEditor } from '../context/VisualEditorContext';
 import { PERMISSIONS } from '../config/rbac';
 import { EditableText } from './EditableText';
 import { EditablePrice } from './EditablePrice';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 
-// Lazy load del Centro de Difusión para carga instantánea del catálogo
-const SocialShareModal = React.lazy(() =>
-  import('./SocialShareModal').then((m) => ({ default: m.SocialShareModal }))
+// Lazy load del Centro de Difusión con reintento automático
+const SocialShareModal = lazyWithRetry(
+  () => import('./SocialShareModal').then((m) => ({ default: m.SocialShareModal })),
+  'SocialShareModal'
 );
 
 /**

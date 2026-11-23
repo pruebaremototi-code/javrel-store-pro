@@ -28,8 +28,37 @@ if (typeof window !== 'undefined') {
     }
   });
 
+  // Manejo proactivo de Vite: cuando un chunk dinámico devuelve 404 por un nuevo despliegue en Vercel
+  window.addEventListener('vite:preloadError', (event) => {
+    event.preventDefault();
+    console.warn('[JavrelStore] Detectado vite:preloadError (chunk 404). Recargando aplicación...');
+    const reloadKey = 'javrel_vite_preload_reload';
+    const lastReload = sessionStorage.getItem(reloadKey);
+    const now = Date.now();
+    if (!lastReload || now - Number(lastReload) > 15000) {
+      try {
+        sessionStorage.setItem(reloadKey, String(now));
+      } catch {}
+      window.location.reload();
+    }
+  });
+
   window.addEventListener('unhandledrejection', (event) => {
     const reason = event?.reason;
+    const msg = String(reason?.message || reason || '');
+    if (/Failed to fetch dynamically imported module/i.test(msg) || /error loading dynamically imported module/i.test(msg)) {
+      const reloadKey = 'javrel_chunk_unhandled_reload';
+      const last = sessionStorage.getItem(reloadKey);
+      const now = Date.now();
+      if (!last || now - Number(last) > 15000) {
+        try {
+          sessionStorage.setItem(reloadKey, String(now));
+        } catch {}
+        console.info('[JavrelStore] Recargando por rechazo de chunk dinámico desactualizado...');
+        window.location.reload();
+        return;
+      }
+    }
     console.error('[JavrelStore] Promesa rechazada sin manejar:', reason);
     try {
       window.localStorage.setItem(
@@ -59,7 +88,27 @@ async function bootstrap() {
     // Import dinámico: si un módulo falla al evaluarse (por ejemplo, una API
     // moderna no soportada por el navegador), mostramos una pantalla de
     // recuperación en lugar de dejar el div #root completamente vacío.
-    const { default: App } = await import('./App.jsx');
+    let App;
+    try {
+      const module = await import('./App.jsx');
+      App = module.default;
+    } catch (importErr) {
+      const errStr = String(importErr?.message || '');
+      if (/Failed to fetch dynamically imported module/i.test(errStr)) {
+        const reloadKey = 'javrel_bootstrap_reload';
+        const last = sessionStorage.getItem(reloadKey);
+        const now = Date.now();
+        if (!last || now - Number(last) > 15000) {
+          try {
+            sessionStorage.setItem(reloadKey, String(now));
+          } catch {}
+          window.location.reload();
+          return;
+        }
+      }
+      throw importErr;
+    }
+
     container.setAttribute('data-react-mounted', '1');
     root.render(
       <StrictMode>

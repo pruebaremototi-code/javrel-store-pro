@@ -1,7 +1,17 @@
 import React, { useMemo } from 'react';
-import { ArrowRight, BadgeCheck, ShieldCheck, Sparkles, Tag, Edit3 } from 'lucide-react';
+import {
+  ArrowRight,
+  BadgeCheck,
+  ShieldCheck,
+  Sparkles,
+  Tag,
+  Edit3,
+  Star,
+  CheckCircle2,
+  Image as ImageIcon,
+} from 'lucide-react';
 import { formatCurrency } from '../services/storeService';
-import { sanitizeCommercialText } from '../services/textUtils';
+import { sanitizeCommercialText, cleanBrand, getProductSlug } from '../services/textUtils';
 import { STORE_LOGO_URL } from '../services/promoCardService';
 import { resolveBadgeStyle } from './BadgeStudio';
 
@@ -546,37 +556,44 @@ export const AdPreviewCard = ({
     return {
       storeName: String(config?.storeName || 'JavrelStore').trim(),
       name: String(product?.name || 'Producto destacado').trim(),
-      brand: String(product?.brand || '').trim(),
+      brand: cleanBrand(product?.brand) || 'JAVRELSTORE',
       condition,
       commercialTag,
       description: sanitizeCommercialText(product?.description || '')
         .replace(/\s+/g, ' ')
-        .slice(0, 150)
+        .slice(0, 160)
         .trim(),
       offer,
       regular,
       hasRegular,
       discount,
-      guarantee: String(
-        config?.guaranteeText ||
-          `Garantía ${String(config?.storeName || 'JavrelStore').trim()} · Compra protegida`
-      ).trim(),
+      rating: Number(product?.rating || 5).toFixed(0),
     };
   }, [product, config]);
 
-  const getPositionClass = (position) => {
-    switch (position) {
-      case 'top-right':
-        return 'top-3 right-3';
-      case 'bottom-left':
-        return 'bottom-3 left-3';
-      case 'bottom-right':
-        return 'bottom-3 right-3';
-      case 'top-left':
-      default:
-        return 'top-3 left-3';
+  const specHighlight = useMemo(() => {
+    if (Array.isArray(product?.specs) && product.specs.length > 0) {
+      for (const s of product.specs) {
+        if (typeof s === 'string') {
+          const clean = s.replace(/\[object Object\]/g, '').trim();
+          if (clean && !/^(CONDICI|ETIQUETA|SKU|EAN|BARCODE|COSTO)/i.test(clean)) {
+            return clean;
+          }
+        } else if (typeof s === 'object' && s !== null) {
+          const k = String(s.title || s.key || '').trim();
+          const v = String(s.detail !== undefined ? s.detail : s.value !== undefined ? s.value : '')
+            .replace(/\[object Object\]/g, '')
+            .trim();
+          if (v && !/^(CONDICI|ETIQUETA|SKU|EAN|BARCODE|COSTO)/i.test(k)) {
+            return k ? `${k}: ${v}` : v;
+          }
+        }
+      }
     }
-  };
+    return (data.condition && data.condition !== 'Nuevo' ? data.condition : 'NUEVO').toUpperCase();
+  }, [product, data.condition]);
+
+  const productSlug = useMemo(() => getProductSlug(product), [product]);
 
   const primaryBadge = useMemo(() => {
     if (!badgeConfig?.primary) {
@@ -633,8 +650,9 @@ export const AdPreviewCard = ({
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-3xl transition-all duration-300 w-full mx-auto ${formatAspect} ${style.shell} ${borderClass} ${className}`}
+      className={`group relative overflow-hidden rounded-3xl transition-all duration-300 w-full mx-auto ${formatAspect} ${style.shell} ${borderClass} ${className} flex flex-col justify-between`}
     >
+      {/* Resplandor perimetral ambiental de fondo */}
       <div
         aria-hidden="true"
         className={`pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full blur-3xl ${style.glowA}`}
@@ -644,420 +662,172 @@ export const AdPreviewCard = ({
         className={`pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full blur-3xl ${style.glowB}`}
       />
 
-      <div className="relative p-4 sm:p-5">
-        {/* Marca */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-[#0A6CFF] to-[#38BDF8] shadow-[0_8px_18px_-8px_rgba(10,108,255,0.8)]">
-              <span className="absolute inset-0 grid place-items-center text-sm font-black text-white">
-                J
-              </span>
-              <img
-                src={STORE_LOGO_URL}
-                alt={`Logo de ${data.storeName}`}
-                className="relative h-full w-full bg-white object-contain p-0.5"
-                loading="lazy"
-                onError={(event) => {
-                  event.currentTarget.style.display = 'none';
-                }}
-              />
+      {isHorizontal ? (
+        /* Disposición Horizontal (Panorámico 16:9 y Banner 1.91:1) */
+        <div className="relative p-4 sm:p-5 h-full grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+          {/* Columna Izquierda: Imagen del Producto Limpia y Protagónica */}
+          <div className="relative h-full aspect-square max-h-[290px] mx-auto flex items-center justify-center overflow-hidden rounded-2xl bg-white border border-slate-100 shadow-sm p-3">
+            <img
+              src={imageUrl || '/zafra/logo-menu.webp'}
+              alt={data.name}
+              className="relative z-2 h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+              loading="lazy"
+              onError={(event) => {
+                event.currentTarget.src = '/zafra/logo-menu.webp';
+              }}
+            />
+            {/* Badges superiores sobre imagen */}
+            {(data.discount > 0 || primaryBadge) && (
+              <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1">
+                <span className="px-2 py-0.5 rounded-lg bg-[#0A6CFF] text-white text-[10px] font-black uppercase tracking-wider shadow-sm">
+                  {primaryBadge?.text || `-${data.discount}%`}
+                </span>
+              </div>
+            )}
+            <span className="absolute top-2.5 right-2.5 z-10 px-1.5 py-0.5 rounded-md bg-slate-900/60 backdrop-blur-xs text-white text-[9.5px] font-bold flex items-center gap-1 shadow-sm">
+              <ImageIcon className="w-2.5 h-2.5" /> 2
             </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-extrabold tracking-tight">{data.storeName}</p>
-              <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${style.subtle}`}>
-                Catálogo oficial
+          </div>
+
+          {/* Columna Derecha: Estructura Idéntica a Tarjeta de Catálogo */}
+          <div className="flex flex-col justify-between h-full py-1">
+            <div>
+              {/* 1. Marca y Calificación */}
+              <div className="flex items-center justify-between text-[11px] font-mono-code uppercase font-bold mb-1">
+                <span className="text-[#0A6CFF] tracking-wider truncate">
+                  {data.brand}
+                </span>
+                <div className="flex items-center gap-1 text-amber-500 shrink-0">
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span className="font-bold text-slate-700 text-xs">{data.rating}</span>
+                  <span className="text-slate-400 text-[10px]">0</span>
+                </div>
+              </div>
+
+              {/* 2. Título Principal */}
+              <h3 className={`font-sans font-bold text-sm sm:text-base line-clamp-2 leading-snug mb-1 tracking-tight ${style.isDark ? 'text-white' : 'text-slate-900'}`}>
+                {data.name}
+              </h3>
+
+              {/* 3. Descripción Corta: 2 líneas */}
+              <p className={`text-[10.5px] leading-relaxed line-clamp-2 mb-2 font-medium ${style.isDark ? 'text-slate-300' : 'text-slate-500'}`}>
+                {data.description || 'Dispositivo Tecnológico Inteligente diseñado para ofrecer el máximo rendimiento y confiabilidad.'}
               </p>
+
+              {/* 4. Insignia Técnica en Verde con Ícono de Check */}
+              <div className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-600 uppercase mb-2 truncate">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span className="truncate font-mono-code">{specHighlight}</span>
+              </div>
+            </div>
+
+            {/* 5. Precios & Franja de Enlace */}
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex items-baseline gap-2">
+                <span className={`font-black text-xl tracking-tight ${style.isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {formatCurrency(data.offer)}
+                </span>
+                {data.hasRegular && (
+                  <span className="text-xs text-slate-400 line-through font-medium">
+                    {formatCurrency(data.regular)}
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-mono-code text-slate-400">
+                <span className="truncate text-slate-500">javrelstore.shop/p/{productSlug}</span>
+                <span className="font-bold text-[#0A6CFF] flex items-center gap-1 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#0A6CFF]" />
+                  JavrelStore
+                </span>
+              </div>
             </div>
           </div>
-          {(data.commercialTag || data.discount > 0) && (
-            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
-              data.commercialTag && /black\s*friday/i.test(data.commercialTag)
-                ? 'bg-black text-amber-300 border border-amber-400/50 shadow-sm'
-                : data.commercialTag && /oferta/i.test(data.commercialTag)
-                  ? 'bg-rose-500 text-white shadow-sm'
-                  : style.statusPill
-            }`}>
-              <Sparkles className="h-2.5 w-2.5" />
-              {data.commercialTag
-                ? data.commercialTag
-                : data.discount > 0
-                  ? `-${data.discount}%`
-                  : null}
-            </span>
-          )}
         </div>
+      ) : (
+        /* Disposición Vertical (Square 1:1, Story 9:16 y Portrait 4:5) — Réplica Fiel de la Tarjeta del Catálogo */
+        <div className="relative h-full flex flex-col justify-between">
+          {/* 1. Imagen Protagonista Superior Full-Bleed sin marcos ni márgenes excesivos */}
+          <div className={`relative w-full overflow-hidden bg-white border-b border-slate-100 flex items-center justify-center ${
+            format === 'story' ? 'h-[58%] min-h-[300px]' : format === 'portrait' ? 'h-[54%] min-h-[240px]' : 'aspect-square h-[54%]'
+          }`}>
+            <img
+              src={imageUrl || '/zafra/logo-menu.webp'}
+              alt={data.name}
+              className="relative z-2 h-full w-full object-contain p-4 sm:p-5 transition-transform duration-500 group-hover:scale-105"
+              loading="lazy"
+              onError={(event) => {
+                event.currentTarget.src = '/zafra/logo-menu.webp';
+              }}
+            />
+            {/* Badge de Oferta / Descuento (Top-Left) */}
+            {(data.discount > 0 || primaryBadge) && (
+              <span className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded-lg bg-[#0A6CFF] text-white text-[11px] font-black uppercase tracking-wider shadow-sm">
+                {primaryBadge?.text || `-${data.discount}%`}
+              </span>
+            )}
+            {/* Contador de Fotos (Top-Right) */}
+            <span className="absolute top-3 right-3 z-10 px-1.5 py-0.5 rounded-md bg-slate-900/60 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1 shadow-sm">
+              <ImageIcon className="w-2.5 h-2.5" /> 2
+            </span>
+          </div>
 
-        {/* Distribución del contenido: Horizontal (2 columnas) para Panoramic/Landscape o Vertical clásica */}
-        {isHorizontal ? (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-            {/* Columna Izquierda: Imagen del Producto */}
-            <div
-              className={`relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl border p-2 ${style.imagePanel}`}
-            >
-              {/* Fondo difuminado ambiental sutil para evitar vacíos */}
-              <img
-                src={imageUrl || '/zafra/logo-menu.webp'}
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover blur-md opacity-25 scale-125"
-              />
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/35 z-1"
-              />
-              <img
-                src={imageUrl || '/zafra/logo-menu.webp'}
-                alt={data.name}
-                className="relative z-2 h-full w-full object-contain scale-[1.06] drop-shadow-[0_14px_18px_rgba(15,23,42,0.18)] transition-transform duration-500 group-hover:scale-[1.10]"
-                loading="lazy"
-                onError={(event) => {
-                  event.currentTarget.src = '/zafra/logo-menu.webp';
-                }}
-              />
-              {/* Badge Primario */}
-              {primaryBadge && primaryStyle && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditBadge?.('primary');
-                  }}
-                  title="Clic para editar este badge en el Studio"
-                  className={`absolute ${getPositionClass(primaryBadge.position)} z-10 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider shadow-md backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 border ${
-                    activeEditingSlot === 'primary'
-                      ? 'ring-2 ring-white ring-offset-2 ring-offset-[#0A6CFF] scale-105 animate-pulse'
-                      : ''
-                  }`}
-                  style={{
-                    background: primaryStyle.background,
-                    color: primaryStyle.color,
-                    borderColor: primaryStyle.border,
-                  }}
-                >
-                  <span className="font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] select-none">
-                    {primaryBadge.text}
-                  </span>
-                </button>
-              )}
-              {/* Badge Secundario */}
-              {secondaryBadge && secondaryStyle && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditBadge?.('secondary');
-                  }}
-                  title="Clic para editar este badge en el Studio"
-                  className={`absolute ${getPositionClass(secondaryBadge.position)} z-10 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider shadow-sm backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 border ${
-                    activeEditingSlot === 'secondary'
-                      ? 'ring-2 ring-white ring-offset-2 ring-offset-[#0A6CFF] scale-105 animate-pulse'
-                      : ''
-                  }`}
-                  style={{
-                    background: secondaryStyle.background,
-                    color: secondaryStyle.color,
-                    borderColor: secondaryStyle.border,
-                  }}
-                >
-                  <BadgeCheck className="h-2.5 w-2.5" />
-                  <span className="font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] select-none">
-                    {secondaryBadge.text}
-                  </span>
-                </button>
-              )}
-            </div>
-
-            {/* Columna Derecha: Panel de Contenido Comercial */}
-            <div
-              className={`transition-all duration-300 overflow-hidden ${
-                glassEffect
-                  ? `rounded-2xl border p-3 ${style.panel}`
-                  : 'rounded-none border-none bg-transparent p-1 shadow-none backdrop-blur-none'
-              }`}
-            >
-              <div className="overflow-hidden">
-                <h3
-                  className={`font-display text-sm sm:text-base leading-tight tracking-tight line-clamp-2 break-words ${
-                    glassEffect
-                      ? style.isDark
-                        ? 'font-extrabold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'
-                        : 'font-extrabold text-slate-950 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]'
-                      : style.isDark
-                        ? 'font-black text-white [text-shadow:_0_2px_8px_rgba(0,0,0,0.95),_0_0_3px_rgba(0,0,0,0.9)]'
-                        : 'font-black text-slate-950 [text-shadow:_0_2px_6px_rgba(255,255,255,0.95),_0_0_3px_rgba(255,255,255,0.9)]'
-                  }`}
-                >
-                  {data.name}
-                </h3>
-                {data.description && (
-                  <p
-                    className={`mt-1 text-[11px] leading-snug line-clamp-2 break-words ${
-                      glassEffect
-                        ? style.isDark
-                          ? 'font-medium text-white/90 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'
-                          : 'font-medium text-slate-800 drop-shadow-[0_1px_2px_rgba(255,255,255,0.85)]'
-                        : style.isDark
-                          ? 'font-semibold text-white/90 [text-shadow:_0_2px_6px_rgba(0,0,0,0.9),_0_0_2px_rgba(0,0,0,0.9)]'
-                          : 'font-semibold text-slate-900 [text-shadow:_0_1px_4px_rgba(255,255,255,0.9),_0_0_2px_rgba(255,255,255,0.9)]'
-                    }`}
-                  >
-                    {data.description}
-                  </p>
-                )}
+          {/* 2. Cuerpo de Información Comercial Estilo Tarjeta Principal */}
+          <div className="p-3.5 sm:p-4 pt-3 flex-1 flex flex-col justify-between">
+            <div>
+              {/* Fila Marca & Calificación */}
+              <div className="flex items-center justify-between text-[11px] sm:text-xs font-mono-code uppercase font-bold mb-1">
+                <span className="text-[#0A6CFF] tracking-wider truncate">
+                  {data.brand}
+                </span>
+                <div className="flex items-center gap-1 text-amber-500 shrink-0">
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span className={`font-bold text-xs ${style.isDark ? 'text-slate-200' : 'text-slate-700'}`}>{data.rating}</span>
+                  <span className="text-slate-400 text-[10px]">0</span>
+                </div>
               </div>
 
-              {/* Precios */}
-              <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span
-                  className={`font-display text-xl sm:text-2xl tracking-tight ${
-                    glassEffect
-                      ? style.isDark
-                        ? 'font-bold text-[#FDE047] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'
-                        : 'font-bold text-slate-950 drop-shadow-[0_1px_3px_rgba(255,255,255,0.9)]'
-                      : style.isDark
-                        ? 'font-black text-[#FDE047] [text-shadow:_0_2px_8px_rgba(0,0,0,0.95),_0_0_3px_rgba(0,0,0,0.9)]'
-                        : 'font-black text-slate-950 [text-shadow:_0_2px_6px_rgba(255,255,255,0.95),_0_0_3px_rgba(255,255,255,0.9)]'
-                  }`}
-                >
+              {/* Título Principal en Negrita de Gran Legibilidad */}
+              <h3 className={`font-sans font-bold text-xs sm:text-[14px] xl:text-[15px] line-clamp-2 leading-snug mb-1.5 tracking-tight ${style.isDark ? 'text-white' : 'text-slate-900'}`}>
+                {data.name}
+              </h3>
+
+              {/* Descripción Corta: Máximo 2 líneas */}
+              <p className={`text-[10px] sm:text-[11px] xl:text-[11.5px] leading-relaxed line-clamp-2 mb-2 font-medium ${style.isDark ? 'text-slate-300' : 'text-slate-500'}`}>
+                {data.description || 'Dispositivo Tecnológico Inteligente diseñado para ofrecer el máximo rendimiento y confiabilidad.'}
+              </p>
+
+              {/* Insignia / Estado o Detalle Técnico con Check Verde */}
+              <div className="flex items-center gap-1.5 text-[9.5px] sm:text-[10.5px] font-semibold text-emerald-600 uppercase mb-2 truncate">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span className="truncate font-mono-code">{specHighlight}</span>
+              </div>
+            </div>
+
+            {/* Franja de Precio y Enlace al Pie */}
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex items-baseline gap-2">
+                <span className={`font-black text-base sm:text-lg tracking-tight ${style.isDark ? 'text-white' : 'text-slate-900'}`}>
                   {formatCurrency(data.offer)}
                 </span>
                 {data.hasRegular && (
-                  <span
-                    className={`text-xs line-through ${
-                      glassEffect
-                        ? style.isDark
-                          ? 'font-semibold text-white/70'
-                          : 'font-semibold text-slate-500'
-                        : style.isDark
-                          ? 'font-bold text-white/80'
-                          : 'font-bold text-slate-600'
-                    }`}
-                  >
+                  <span className="text-xs text-slate-400 line-through font-medium">
                     {formatCurrency(data.regular)}
                   </span>
                 )}
               </div>
 
-              {/* CTA */}
-              <button
-                type="button"
-                onClick={onCtaClick}
-                className={`group/cta mt-2.5 inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-extrabold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 cursor-pointer ${style.cta}`}
-                aria-label={`${ctaText} — ${data.name}`}
-              >
-                {ctaText}
-                <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover/cta:translate-x-0.5" />
-              </button>
+              {/* Franja sutil con dominio corto y marca JavrelStore */}
+              <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[9.5px] sm:text-[10px] font-mono-code text-slate-400">
+                <span className="truncate text-slate-500">javrelstore.shop/p/{productSlug}</span>
+                <span className="font-bold text-[#0A6CFF] flex items-center gap-1 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#0A6CFF]" />
+                  JavrelStore
+                </span>
+              </div>
             </div>
           </div>
-        ) : (
-          /* Disposición Vertical para Square, Story y Portrait */
-          <>
-            {/* Imagen ampliada con profundidad 3D y mayor protagonismo */}
-            <div
-              className={`relative flex items-center justify-center overflow-hidden rounded-3xl border p-2 sm:p-2.5 ${style.imagePanel} ${
-                format === 'story' ? 'mt-2.5 aspect-square w-full' : 'mt-3.5 aspect-[3/2]'
-              }`}
-            >
-              {/* Fondo difuminado ambiental sutil para evitar vacíos */}
-              <img
-                src={imageUrl || '/zafra/logo-menu.webp'}
-                alt=""
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover blur-md opacity-25 scale-125"
-              />
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/35 z-1"
-              />
-              <img
-                src={imageUrl || '/zafra/logo-menu.webp'}
-                alt={data.name}
-                className="relative z-2 h-full w-full object-contain scale-[1.10] drop-shadow-[0_18px_22px_rgba(15,23,42,0.18)] transition-transform duration-500 group-hover:scale-[1.14]"
-                loading="lazy"
-                onError={(event) => {
-                  event.currentTarget.src = '/zafra/logo-menu.webp';
-                }}
-              />
-              {/* Badge Primario (Promoción / Oferta) */}
-              {primaryBadge && primaryStyle && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditBadge?.('primary');
-                  }}
-                  title="Clic para editar este badge en el Studio"
-                  className={`absolute ${getPositionClass(primaryBadge.position)} z-10 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 border ${
-                    activeEditingSlot === 'primary'
-                      ? 'ring-2 ring-white ring-offset-2 ring-offset-[#0A6CFF] scale-105 animate-pulse'
-                      : ''
-                  }`}
-                  style={{
-                    background: primaryStyle.background,
-                    color: primaryStyle.color,
-                    borderColor: primaryStyle.border,
-                    textShadow: primaryStyle.color === '#0F172A'
-                      ? '0 1px 2px rgba(255,255,255,0.9)'
-                      : '0 2px 4px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.9)',
-                  }}
-                >
-                  <span className="font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] select-none">
-                    {primaryBadge.text}
-                  </span>
-                  {onEditBadge && (
-                    <Edit3 className="w-2.5 h-2.5 opacity-70 hover:opacity-100 transition-opacity" />
-                  )}
-                </button>
-              )}
-
-              {/* Badge Secundario (Condición Física) */}
-              {secondaryBadge && secondaryStyle && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditBadge?.('secondary');
-                  }}
-                  title="Clic para editar este badge en el Studio"
-                  className={`absolute ${getPositionClass(secondaryBadge.position)} z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider shadow-md backdrop-blur-md transition-all cursor-pointer hover:scale-105 active:scale-95 border ${
-                    activeEditingSlot === 'secondary'
-                      ? 'ring-2 ring-white ring-offset-2 ring-offset-[#0A6CFF] scale-105 animate-pulse'
-                      : ''
-                  }`}
-                  style={{
-                    background: secondaryStyle.background,
-                    color: secondaryStyle.color,
-                    borderColor: secondaryStyle.border,
-                    textShadow: secondaryStyle.color === '#0F172A'
-                      ? '0 1px 2px rgba(255,255,255,0.9)'
-                      : '0 2px 4px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.9)',
-                  }}
-                >
-                  <BadgeCheck className="h-2.5 w-2.5" />
-                  <span className="font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] select-none">
-                    {secondaryBadge.text}
-                  </span>
-                  {onEditBadge && (
-                    <Edit3 className="w-2 h-2 opacity-70 hover:opacity-100 transition-opacity" />
-                  )}
-                </button>
-              )}
-            </div>
-
-            {/* Panel de contenido comercial (Cristal esmerilado o Fondo directo 3D) */}
-            <div
-              className={`mt-3 transition-all duration-300 overflow-hidden ${
-                glassEffect
-                  ? `rounded-2xl border p-3 sm:p-3.5 ${style.panel}`
-                  : 'rounded-none border-none bg-transparent p-1 shadow-none backdrop-blur-none'
-              }`}
-            >
-              <div className="overflow-hidden">
-                <h3
-                  className={`font-display text-sm sm:text-base leading-tight tracking-tight line-clamp-2 break-words ${
-                    glassEffect
-                      ? style.isDark
-                        ? 'font-extrabold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'
-                        : 'font-extrabold text-slate-950 drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]'
-                      : style.isDark
-                        ? 'font-black text-white [text-shadow:_0_2px_8px_rgba(0,0,0,0.95),_0_0_3px_rgba(0,0,0,0.9)]'
-                        : 'font-black text-slate-950 [text-shadow:_0_2px_6px_rgba(255,255,255,0.95),_0_0_3px_rgba(255,255,255,0.9)]'
-                  }`}
-                >
-                  {data.name}
-                </h3>
-                {data.description && (
-                  <p
-                    className={`mt-1 text-[11px] sm:text-[12px] leading-snug line-clamp-2 break-words ${
-                      glassEffect
-                        ? style.isDark
-                          ? 'font-medium text-white/90 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'
-                          : 'font-medium text-slate-800 drop-shadow-[0_1px_2px_rgba(255,255,255,0.85)]'
-                        : style.isDark
-                          ? 'font-semibold text-white/90 [text-shadow:_0_2px_6px_rgba(0,0,0,0.9),_0_0_2px_rgba(0,0,0,0.9)]'
-                          : 'font-semibold text-slate-900 [text-shadow:_0_1px_4px_rgba(255,255,255,0.9),_0_0_2px_rgba(255,255,255,0.9)]'
-                    }`}
-                  >
-                    {data.description}
-                  </p>
-                )}
-              </div>
-
-              {/* Precios */}
-              <div className="mt-2.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                <span
-                  className={`font-display text-xl sm:text-2xl tracking-tight ${
-                    glassEffect
-                      ? style.isDark
-                        ? 'font-bold text-[#FDE047] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]'
-                        : 'font-bold text-slate-950 drop-shadow-[0_1px_3px_rgba(255,255,255,0.9)]'
-                      : style.isDark
-                        ? 'font-black text-[#FDE047] [text-shadow:_0_2px_8px_rgba(0,0,0,0.95),_0_0_3px_rgba(0,0,0,0.9)]'
-                        : 'font-black text-slate-950 [text-shadow:_0_2px_6px_rgba(255,255,255,0.95),_0_0_3px_rgba(255,255,255,0.9)]'
-                  }`}
-                >
-                  {formatCurrency(data.offer)}
-                </span>
-                {data.hasRegular && (
-                  <span
-                    className={`text-xs line-through ${
-                      glassEffect
-                        ? style.isDark
-                          ? 'font-semibold text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]'
-                          : 'font-semibold text-slate-500'
-                        : style.isDark
-                          ? 'font-bold text-white/80 [text-shadow:_0_1px_4px_rgba(0,0,0,0.9)]'
-                          : 'font-bold text-slate-600 [text-shadow:_0_1px_3px_rgba(255,255,255,0.9)]'
-                    }`}
-                  >
-                    {formatCurrency(data.regular)}
-                  </span>
-                )}
-                {data.hasRegular && (
-                  <span
-                    className={`ml-auto rounded-full px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wide ${
-                      !glassEffect && style.isDark
-                        ? 'bg-black/50 text-white border border-white/30 backdrop-blur-sm [text-shadow:_0_1px_2px_rgba(0,0,0,0.8)]'
-                        : style.savings
-                    }`}
-                  >
-                    Ahorras {formatCurrency(data.regular - data.offer)}
-                  </span>
-                )}
-              </div>
-
-              {/* CTA */}
-              <button
-                type="button"
-                onClick={onCtaClick}
-                className={`group/cta mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-extrabold shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 cursor-pointer ${style.cta}`}
-                aria-label={`${ctaText} — ${data.name}`}
-              >
-                {ctaText}
-                <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover/cta:translate-x-0.5" />
-              </button>
-
-              <div
-                className={`mt-2.5 flex items-center justify-center gap-1.5 rounded-xl border px-3 py-1.5 text-[10.5px] font-bold tracking-wide backdrop-blur-sm ${
-                  !glassEffect
-                    ? style.isDark
-                      ? 'bg-black/45 border-white/20 text-white shadow-sm [text-shadow:_0_1px_2px_rgba(0,0,0,0.9)]'
-                      : 'bg-white/85 border-slate-300 text-slate-800 shadow-sm'
-                    : style.guarantee
-                }`}
-              >
-                <ShieldCheck
-                  className={`h-3.5 w-3.5 ${
-                    !glassEffect && style.isDark ? 'text-[#FDE047]' : style.accentText
-                  }`}
-                />
-                {data.guarantee}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

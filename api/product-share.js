@@ -6,7 +6,7 @@
 // profesional. Después redirige al visitante a la ficha interactiva del SPA.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const FALLBACK_ORIGIN = 'https://javrelstore.vercel.app';
+const FALLBACK_ORIGIN = 'https://www.javrelstore.shop';
 const STORE_NAME = 'JavrelStore';
 const DEFAULT_IMAGE = '/zafra/banner-teclado.jpg';
 const DEFAULT_SUPABASE_URL = 'https://mnwockpzhhbcavqehrdy.supabase.co';
@@ -108,6 +108,31 @@ async function fetchProduct(id) {
         const slugRows = await slugRes.json();
         if (Array.isArray(slugRows) && slugRows.length > 0) {
           productResult = slugRows[0];
+        }
+      }
+    } catch {}
+  }
+
+  // Intento alternativo C: búsqueda por coincidencia parcial de título o referencia a partir del slug
+  if (!productResult && id) {
+    try {
+      const words = String(id).split('-').filter((w) => w.length > 2);
+      if (words.length > 0) {
+        const queryTerm = encodeURIComponent(`%${words.slice(0, 3).join('%')}%`);
+        const searchEndpoint = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/products?or=(title.ilike.${queryTerm},name.ilike.${queryTerm},reference.ilike.${queryTerm})&select=*&limit=1`;
+        const searchRes = await fetch(searchEndpoint, {
+          headers: {
+            apikey: supabaseKey,
+            Authorization: `Bearer ${supabaseKey}`,
+            Accept: 'application/json',
+          },
+          signal: AbortSignal.timeout(4000),
+        });
+        if (searchRes.ok) {
+          const searchRows = await searchRes.json();
+          if (Array.isArray(searchRows) && searchRows.length > 0) {
+            productResult = searchRows[0];
+          }
         }
       }
     } catch {}

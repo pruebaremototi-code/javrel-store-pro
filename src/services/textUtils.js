@@ -70,6 +70,21 @@ export const slugify = (value) =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
 
+/**
+ * Obtiene el slug limpio y amigable de un producto para URLs profesionales (/p/:slug).
+ * Prioriza slug explícito > nombre/título > referencia > id como fallback retrocompatible.
+ */
+export const getProductSlug = (product) => {
+  if (!product) return '';
+  if (product.slug && typeof product.slug === 'string' && product.slug.trim()) {
+    return slugify(product.slug);
+  }
+  const baseName = product.name || product.title || product.reference || '';
+  const slug = slugify(baseName);
+  if (slug) return slug;
+  return String(product.id || '').trim();
+};
+
 const UUID_GLOBAL_RE =
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
 

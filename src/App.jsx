@@ -16,43 +16,54 @@ import { ShowcaseVideoReel } from './components/ShowcaseVideoReel';
 import { CategorySidebar } from './components/CategorySidebar';
 import { storeService } from './services/storeService';
 import { supabase } from './supabaseClient';
-import { generateUuid, isUuid, resolveCategoryLabel, sanitizeCommercialText, cleanBrand, normalizeSearchText } from './services/textUtils';
+import { generateUuid, isUuid, resolveCategoryLabel, sanitizeCommercialText, cleanBrand, normalizeSearchText, slugify } from './services/textUtils';
 import { orderService } from './services/orderService';
 import { adminAuthService } from './services/adminAuthService';
 import { INITIAL_CONFIG, INITIAL_CATEGORIES, INITIAL_PRODUCTS } from './data/initialData';
 import { VisualEditorProvider } from './context/VisualEditorContext';
 import { PERMISSIONS } from './config/rbac';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 
-// Code-Splitting para Carga Instantánea de la Tienda (Evita empaquetar modales de gestión pesados)
-const ProductModal = lazy(() =>
-  import('./components/ProductModal').then((m) => ({ default: m.ProductModal }))
+// Code-Splitting Resiliente para Carga Instantánea con Reintento Automático ante nuevos despliegues
+const ProductModal = lazyWithRetry(
+  () => import('./components/ProductModal').then((m) => ({ default: m.ProductModal })),
+  'ProductModal'
 );
-const ImageLightbox = lazy(() =>
-  import('./components/ImageLightbox').then((m) => ({ default: m.ImageLightbox }))
+const ImageLightbox = lazyWithRetry(
+  () => import('./components/ImageLightbox').then((m) => ({ default: m.ImageLightbox })),
+  'ImageLightbox'
 );
-const MobileFiltersModal = lazy(() =>
-  import('./components/MobileFiltersModal').then((m) => ({ default: m.MobileFiltersModal }))
+const MobileFiltersModal = lazyWithRetry(
+  () => import('./components/MobileFiltersModal').then((m) => ({ default: m.MobileFiltersModal })),
+  'MobileFiltersModal'
 );
-const WixEditorTopBar = lazy(() =>
-  import('./components/WixEditorTopBar').then((m) => ({ default: m.WixEditorTopBar }))
+const WixEditorTopBar = lazyWithRetry(
+  () => import('./components/WixEditorTopBar').then((m) => ({ default: m.WixEditorTopBar })),
+  'WixEditorTopBar'
 );
-const InPlaceEditorToolbar = lazy(() =>
-  import('./components/InPlaceEditorToolbar').then((m) => ({ default: m.InPlaceEditorToolbar }))
+const InPlaceEditorToolbar = lazyWithRetry(
+  () => import('./components/InPlaceEditorToolbar').then((m) => ({ default: m.InPlaceEditorToolbar })),
+  'InPlaceEditorToolbar'
 );
-const AdminAuthModal = lazy(() =>
-  import('./components/AdminAuthModal').then((m) => ({ default: m.AdminAuthModal }))
+const AdminAuthModal = lazyWithRetry(
+  () => import('./components/AdminAuthModal').then((m) => ({ default: m.AdminAuthModal })),
+  'AdminAuthModal'
 );
-const AdminOrdersDashboard = lazy(() =>
-  import('./components/AdminOrdersDashboard').then((m) => ({ default: m.AdminOrdersDashboard }))
+const AdminOrdersDashboard = lazyWithRetry(
+  () => import('./components/AdminOrdersDashboard').then((m) => ({ default: m.AdminOrdersDashboard })),
+  'AdminOrdersDashboard'
 );
-const BulkImportModal = lazy(() =>
-  import('./components/BulkImportModal').then((m) => ({ default: m.BulkImportModal }))
+const BulkImportModal = lazyWithRetry(
+  () => import('./components/BulkImportModal').then((m) => ({ default: m.BulkImportModal })),
+  'BulkImportModal'
 );
-const ImagePickerModal = lazy(() =>
-  import('./components/ImagePickerModal').then((m) => ({ default: m.ImagePickerModal }))
+const ImagePickerModal = lazyWithRetry(
+  () => import('./components/ImagePickerModal').then((m) => ({ default: m.ImagePickerModal })),
+  'ImagePickerModal'
 );
-const StoreChatbot = lazy(() =>
-  import('./components/StoreChatbot').then((m) => ({ default: m.StoreChatbot }))
+const StoreChatbot = lazyWithRetry(
+  () => import('./components/StoreChatbot').then((m) => ({ default: m.StoreChatbot })),
+  'StoreChatbot'
 );
 import {
   ArrowUpDown,
@@ -432,11 +443,16 @@ export function App() {
     ];
 
     const cleanSharedLower = sharedId.toLowerCase();
+    const cleanSharedSlug = slugify(sharedId);
     const match = localPool.find(
       (item) =>
         item &&
         (String(item.id).trim() === sharedId ||
+          (item.slug && String(item.slug).toLowerCase().trim() === cleanSharedLower) ||
+          (item.slug && slugify(item.slug) === cleanSharedSlug) ||
+          (item.name && slugify(item.name) === cleanSharedSlug) ||
           (item.reference && String(item.reference).toLowerCase().trim() === cleanSharedLower) ||
+          (item.reference && slugify(item.reference) === cleanSharedSlug) ||
           (item.sku && String(item.sku).toLowerCase().trim() === cleanSharedLower) ||
           (item.barcode && String(item.barcode).toLowerCase().trim() === cleanSharedLower) ||
           (item.ean && String(item.ean).toLowerCase().trim() === cleanSharedLower))

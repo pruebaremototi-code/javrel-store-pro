@@ -650,11 +650,14 @@ export const storeService = {
     }
   },
 
-  // Obtener un producto individual por ID, código, referencia o SKU (para enlaces directos /p/:id)
+  // Obtener un producto individual por ID, código, referencia, SKU o Slug (para enlaces directos /p/:slug o /p/:id)
   async getProductById(id, { timeoutMs = 6000 } = {}) {
     if (!id) return null;
     const cleanId = String(id).trim();
     if (!cleanId) return null;
+
+    const cleanIdLower = cleanId.toLowerCase();
+    const cleanSlug = slugify(cleanId);
 
     // 1. Buscar en caché local de productos (memoria / localStorage) primero
     const local = this.getProductsFromStorage();
@@ -663,10 +666,14 @@ export const storeService = {
         (p) =>
           p &&
           (String(p.id).trim() === cleanId ||
-            (p.reference && String(p.reference).toLowerCase().trim() === cleanId.toLowerCase()) ||
-            (p.sku && String(p.sku).toLowerCase().trim() === cleanId.toLowerCase()) ||
-            (p.barcode && String(p.barcode).toLowerCase().trim() === cleanId.toLowerCase()) ||
-            (p.ean && String(p.ean).toLowerCase().trim() === cleanId.toLowerCase()))
+            (p.slug && String(p.slug).toLowerCase().trim() === cleanIdLower) ||
+            (p.slug && slugify(p.slug) === cleanSlug) ||
+            (p.name && slugify(p.name) === cleanSlug) ||
+            (p.reference && String(p.reference).toLowerCase().trim() === cleanIdLower) ||
+            (p.reference && slugify(p.reference) === cleanSlug) ||
+            (p.sku && String(p.sku).toLowerCase().trim() === cleanIdLower) ||
+            (p.barcode && String(p.barcode).toLowerCase().trim() === cleanIdLower) ||
+            (p.ean && String(p.ean).toLowerCase().trim() === cleanIdLower))
       );
       if (match) return match;
     }
@@ -689,13 +696,36 @@ export const storeService = {
 
         // Si no es UUID o no se encontró por id, buscar por reference, sku, barcode o ean
         if (!data) {
-          const alt = await supabase
-            .from('products')
-            .select('*')
-            .or(`reference.eq.${cleanId},sku.eq.${cleanId},barcode.eq.${cleanId},ean.eq.${cleanId}`)
-            .limit(1)
-            .maybeSingle();
-          if (alt?.data) data = alt.data;
+          try {
+            const alt = await supabase
+              .from('products')
+              .select('*')
+              .or(`reference.eq.${cleanId},sku.eq.${cleanId},barcode.eq.${cleanId},ean.eq.${cleanId}`)
+              .limit(1)
+              .maybeSingle();
+            if (alt?.data) data = alt.data;
+          } catch {}
+        }
+
+        // Búsqueda inteligente por título / nombre si viene un slug amigable
+        if (!data && cleanSlug) {
+          try {
+            const searchTerms = cleanSlug.split('-').filter((t) => t.length > 2);
+            if (searchTerms.length > 0) {
+              const queryStr = `%${searchTerms.slice(0, 3).join('%')}%`;
+              const byTitle = await supabase
+                .from('products')
+                .select('*')
+                .ilike('title', queryStr)
+                .limit(6);
+              if (byTitle?.data && byTitle.data.length > 0) {
+                const exactSlug = byTitle.data.find(
+                  (row) => slugify(row.title || row.name || '') === cleanSlug
+                );
+                data = exactSlug || byTitle.data[0];
+              }
+            }
+          } catch {}
         }
 
         return data;

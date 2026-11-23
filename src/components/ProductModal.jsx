@@ -32,14 +32,18 @@ import {
   sanitizeCommercialText,
   isUuid,
 } from '../services/textUtils';
+import { buildProductShareUrl } from '../services/shareService';
+import { lazyWithRetry } from '../utils/lazyWithRetry';
 import confetti from 'canvas-confetti';
 
-// Lazy loading para aceleración del modal
-const ImagePickerModal = React.lazy(() =>
-  import('./ImagePickerModal').then((m) => ({ default: m.ImagePickerModal }))
+// Lazy loading resiliente para aceleración del modal
+const ImagePickerModal = lazyWithRetry(
+  () => import('./ImagePickerModal').then((m) => ({ default: m.ImagePickerModal })),
+  'ImagePickerModal'
 );
-const SocialShareModal = React.lazy(() =>
-  import('./SocialShareModal').then((m) => ({ default: m.SocialShareModal }))
+const SocialShareModal = lazyWithRetry(
+  () => import('./SocialShareModal').then((m) => ({ default: m.SocialShareModal })),
+  'SocialShareModal'
 );
 
 // ─── AutoTextarea ────────────────────────────────────────────────────────────
@@ -194,7 +198,7 @@ export const ProductModal = ({
 
   const handleCopyDirectLink = () => {
     try {
-      const url = `${window.location.origin}/p/${product?.id}`;
+      const url = buildProductShareUrl(product);
       navigator.clipboard.writeText(url);
       setIsLinkCopied(true);
       setTimeout(() => setIsLinkCopied(false), 2200);

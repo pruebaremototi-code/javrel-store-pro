@@ -197,6 +197,7 @@ function localApiDevPlugin() {
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/',
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
     __APP_VERSION__: JSON.stringify(appVersion),
@@ -204,6 +205,7 @@ export default defineConfig({
     __BUILD_TIMESTAMP__: JSON.stringify(Date.now()),
   },
   build: {
+    emptyOutDir: true,
     // Hash de contenido nativo de Vite: sin sufijos manuales tipo "-v293".
     // Cada build genera nombres limpios del tipo assets/index-<hash>.js.
     manifest: true,

@@ -228,6 +228,29 @@ export class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
+    // Si es un error de chunk 404 tras un despliegue en Vercel, recargar automáticamente una vez
+    const msg = String(error?.message || '');
+    const isChunkLoadError =
+      error?.name === 'ChunkLoadError' ||
+      /Failed to fetch dynamically imported module/i.test(msg) ||
+      /error loading dynamically imported module/i.test(msg) ||
+      /Importing a module script failed/i.test(msg) ||
+      /Loading chunk [\w-]+ failed/i.test(msg);
+
+    if (isChunkLoadError) {
+      const retryKey = 'javrel_eb_chunk_retry';
+      const lastRetry = sessionStorage.getItem(retryKey);
+      const now = Date.now();
+      if (!lastRetry || now - Number(lastRetry) > 15000) {
+        try {
+          sessionStorage.setItem(retryKey, String(now));
+        } catch {}
+        console.info('[JavrelStore][ErrorBoundary] Chunk obsoleto detectado tras despliegue. Recargando automáticamente...');
+        window.location.reload();
+        return;
+      }
+    }
+
     // Registro local para diagnóstico; nunca se muestra al comprador sin formato.
     console.error('[JavrelStore][ErrorBoundary] Error no controlado:', error, errorInfo);
     try {
