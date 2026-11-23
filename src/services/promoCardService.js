@@ -2071,6 +2071,10 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   const radius = 42;
   const isDark = palette.isDark;
 
+  // ─── ZONA SEGURA: nada se dibujará por debajo de este límite ───────────────
+  // WhatsApp/Instagram Stories cubren ~280px del fondo con el caption.
+  const SAFE_ZONE_BOTTOM = height - 300; // y = 1620
+
   // Fondo de la tarjeta con sombra perimetral
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.22)';
@@ -2092,8 +2096,9 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   roundRect(ctx, pad, pad, cardW, cardH, radius);
   ctx.clip();
 
-  // 1. Imagen Superior Protagónica 9:16 (h ≈ 1080px)
-  const imgBoxH = 1080;
+  // ── 1. IMAGEN SUPERIOR PROTAGÓNICA ─────────────────────────────────────────
+  // Reducida a 920px (en lugar de 1080) para liberar espacio de contenido
+  const imgBoxH = 920;
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(pad, pad, cardW, imgBoxH);
 
@@ -2101,15 +2106,24 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    const padding = 48;
-    const scale = Math.min((cardW - padding * 2) / image.width, (imgBoxH - padding * 2) / image.height);
+    const imgPad = 52;
+    const scale = Math.min(
+      (cardW - imgPad * 2) / image.width,
+      (imgBoxH - imgPad * 2) / image.height
+    );
     const drawW = image.width * scale;
     const drawH = image.height * scale;
-    ctx.drawImage(image, pad + (cardW - drawW) / 2, pad + (imgBoxH - drawH) / 2, drawW, drawH);
+    ctx.drawImage(
+      image,
+      pad + (cardW - drawW) / 2,
+      pad + (imgBoxH - drawH) / 2,
+      drawW,
+      drawH
+    );
     ctx.restore();
   }
 
-  // Divisor inferior de la imagen
+  // Divisor inferior imagen
   ctx.beginPath();
   ctx.moveTo(pad, pad + imgBoxH);
   ctx.lineTo(pad + cardW, pad + imgBoxH);
@@ -2131,83 +2145,93 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
     ctx.restore();
   }
 
-  ctx.save();
-  ctx.font = `700 26px ${FONT_HEAD}`;
-  fillRoundRect(ctx, pad + cardW - 110, pad + 32, 78, 48, 12, 'rgba(15,23,42,0.7)');
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('📷 2', pad + cardW - 71, pad + 32 + 25);
-  ctx.restore();
+  if (data.photoCount > 1) {
+    ctx.save();
+    ctx.font = `700 26px ${FONT_HEAD}`;
+    const photoLabel = `📷 ${data.photoCount}`;
+    fillRoundRect(ctx, pad + cardW - 110, pad + 32, 78, 48, 12, 'rgba(15,23,42,0.7)');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(photoLabel, pad + cardW - 71, pad + 32 + 25);
+    ctx.restore();
+  }
 
-  // 2. Fila Marca y Calificación
+  // ── 2. FILA MARCA + CALIFICACIÓN ───────────────────────────────────────────
   const contentPad = pad + 48;
   const contentW = cardW - 96;
-  const brandY = pad + imgBoxH + 64;
+  // brandY arranca justo debajo de la imagen con un gap cómodo
+  const brandY = pad + imgBoxH + 72; // y ≈ 1040
 
   ctx.save();
-  ctx.font = `800 32px ${FONT_HEAD}`;
+  ctx.font = `800 30px ${FONT_HEAD}`;
   ctx.fillStyle = '#0A6CFF';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(data.brand.toUpperCase(), contentPad, brandY);
+  ctx.fillText((data.brand || 'JavrelStore').toUpperCase(), contentPad, brandY);
 
   ctx.fillStyle = '#F59E0B';
   ctx.textAlign = 'right';
-  ctx.fillText(`★ ${data.rating} 0`, contentPad + contentW, brandY);
+  ctx.fillText(`★ ${data.rating || '5.0'}`, contentPad + contentW, brandY);
   ctx.restore();
 
-  // 3. Título del producto
-  const titleY = brandY + 46;
+  // ── 3. TÍTULO DEL PRODUCTO ─────────────────────────────────────────────────
+  // Gap aumentado a +72 (antes +46) para evitar la superposición con el brand
+  const titleY = brandY + 72; // y ≈ 1112
   drawWrappedText(
     ctx,
     data.productName,
     contentPad,
     titleY,
     contentW,
-    62,
-    2,
-    `800 52px ${FONT_HEAD}`,
+    58,   // lineHeight
+    2,    // maxLines
+    `800 48px ${FONT_HEAD}`,
     isDark ? '#FFFFFF' : '#0F172A'
   );
 
-  // 4. Descripción corta (2 líneas)
-  const descY = titleY + 140;
+  // ── 4. DESCRIPCIÓN CORTA (2 líneas, con wrapping) ─────────────────────────
+  const descY = titleY + 130; // y ≈ 1242
   drawWrappedText(
     ctx,
-    data.description || 'Dispositivo Tecnológico Inteligente diseñado para ofrecer el máximo rendimiento.',
+    data.description || 'Dispositivo tecnológico diseñado para el máximo rendimiento.',
     contentPad,
     descY,
     contentW,
-    42,
-    2,
-    `600 30px ${FONT_BODY}`,
+    40,   // lineHeight
+    2,    // maxLines
+    `500 28px ${FONT_BODY}`,
     isDark ? 'rgba(255,255,255,0.7)' : '#64748B'
   );
 
-  // 5. Insignia / Detalle técnico con check verde
-  const specY = descY + 104;
-  ctx.save();
-  ctx.font = `800 30px ${FONT_HEAD}`;
-  ctx.fillStyle = '#059669';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`✓ ${data.specHighlight}`, contentPad, specY);
-  ctx.restore();
+  // ── 5. SPEC HIGHLIGHT con wrapping (evita truncación) ─────────────────────
+  const specY = descY + 100; // y ≈ 1342
+  if (data.specHighlight) {
+    drawWrappedText(
+      ctx,
+      `✓ ${data.specHighlight}`,
+      contentPad,
+      specY,
+      contentW,
+      36,   // lineHeight
+      2,    // maxLines
+      `700 27px ${FONT_HEAD}`,
+      '#059669'
+    );
+  }
 
-  // Divisor para precios
-  const priceDivY = specY + 44;
+  // ── 6. DIVISOR + PRECIOS ───────────────────────────────────────────────────
+  const priceDivY = specY + 88; // y ≈ 1430
   ctx.beginPath();
   ctx.moveTo(contentPad, priceDivY);
   ctx.lineTo(contentPad + contentW, priceDivY);
-  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#E2E8F0';
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // 6. Precios
-  const priceY = priceDivY + 54;
+  const priceY = priceDivY + 62; // y ≈ 1492
   ctx.save();
-  ctx.font = `900 68px ${FONT_HEAD}`;
+  ctx.font = `900 64px ${FONT_HEAD}`;
   ctx.fillStyle = isDark ? '#FFFFFF' : '#0F172A';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -2217,9 +2241,9 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
 
   if (data.hasRegular) {
     const regStr = formatCurrency(data.regular);
-    ctx.font = `700 36px ${FONT_HEAD}`;
+    ctx.font = `600 34px ${FONT_HEAD}`;
     ctx.fillStyle = '#94A3B8';
-    const regX = contentPad + offerW + 28;
+    const regX = contentPad + offerW + 24;
     ctx.fillText(regStr, regX, priceY + 4);
     const regW = ctx.measureText(regStr).width;
     ctx.beginPath();
@@ -2231,29 +2255,52 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   }
   ctx.restore();
 
-  // 7. Franja de enlace al pie
-  const footerDivY = pad + cardH - 84;
-  ctx.beginPath();
-  ctx.moveTo(contentPad, footerDivY);
-  ctx.lineTo(contentPad + contentW, footerDivY);
-  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  // ── 7. BOTÓN CTA VISUAL (decorativo, dentro de zona segura) ───────────────
+  const ctaY = priceY + 88; // y ≈ 1580
+  if (ctaY + 72 < SAFE_ZONE_BOTTOM) {
+    const ctaBtnW = contentW;
+    const ctaBtnH = 72;
+    ctx.save();
+    // Degradado azul del botón
+    const ctaGrad = ctx.createLinearGradient(contentPad, ctaY, contentPad + ctaBtnW, ctaY);
+    ctaGrad.addColorStop(0, '#0A6CFF');
+    ctaGrad.addColorStop(1, '#0050CC');
+    fillRoundRect(ctx, contentPad, ctaY, ctaBtnW, ctaBtnH, 20, ctaGrad);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `800 32px ${FONT_HEAD}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Ver en JavrelStore →', contentPad + ctaBtnW / 2, ctaY + ctaBtnH / 2);
+    ctx.restore();
+  }
 
-  const footerY = footerDivY + 44;
-  ctx.save();
-  ctx.font = `600 26px ${FONT_BODY}`;
-  ctx.fillStyle = '#64748B';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`javrelstore.shop/p/${data.slug}`, contentPad, footerY);
+  // ── 8. FRANJA DE MARCA JAVRELSTORE (logo + nombre, SIN URL) ───────────────
+  // Posicionada justo arriba de la zona segura
+  const logoStripY = SAFE_ZONE_BOTTOM - 72; // y ≈ 1548 — ajustar si CTA está activo
+  const brandStripY = ctaY + 72 < SAFE_ZONE_BOTTOM
+    ? Math.min(ctaY + 72 + 36, SAFE_ZONE_BOTTOM - 60)
+    : logoStripY;
 
-  ctx.font = `800 26px ${FONT_HEAD}`;
-  ctx.fillStyle = '#0A6CFF';
-  ctx.textAlign = 'right';
-  ctx.fillText('● JavrelStore', contentPad + contentW, footerY);
-  ctx.restore();
+  if (brandStripY + 48 < height) {
+    // Divisor superior de la franja de marca
+    ctx.beginPath();
+    ctx.moveTo(contentPad, brandStripY - 20);
+    ctx.lineTo(contentPad + contentW, brandStripY - 20);
+    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
+    ctx.save();
+    // Punto azul + nombre de marca
+    ctx.font = `800 28px ${FONT_HEAD}`;
+    ctx.fillStyle = '#0A6CFF';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('● JavrelStore', contentPad + contentW / 2, brandStripY + 20);
+    ctx.restore();
+  }
+
+  // ── FIN DEL CLIP ──────────────────────────────────────────────────────────
   ctx.restore();
 };
 
@@ -2803,11 +2850,21 @@ export async function renderPromoCard({
   const data = buildCardData(product, config, ctaText, badgeConfig);
 
   // 1) Composición completa sobre un lienzo interno.
+  // Para el formato story (9:16) aplicamos escala 2× para nitidez en pantallas
+  // de alta densidad (Retina / AMOLED). Los demás formatos mantienen 1×.
+  const dprScale = spec.id === 'story' ? 2 : 1;
   const composition = document.createElement('canvas');
-  composition.width = spec.width;
-  composition.height = spec.height;
+  composition.width = spec.width * dprScale;
+  composition.height = spec.height * dprScale;
+  if (spec.id === 'story') {
+    composition.style.width = `${spec.width}px`;
+    composition.style.height = `${spec.height}px`;
+  }
   const compositionCtx = composition.getContext('2d');
   if (!compositionCtx) throw new Error('No se pudo inicializar el canvas.');
+  if (dprScale > 1) {
+    compositionCtx.scale(dprScale, dprScale);
+  }
 
   compositionCtx.imageSmoothingEnabled = true;
   compositionCtx.imageSmoothingQuality = 'high';
