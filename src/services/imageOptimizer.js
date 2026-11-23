@@ -1,7 +1,7 @@
 /**
  * Módulo de Optimización de Medios y Compresión Automática WebP Ultraligera
  * Diseñado para e-commerce de alto rendimiento y cero saturación en Supabase y Vercel.
- * Redimensiona a máx. 1200px y comprime a WebP ≤80KB antes de subir a Supabase Storage.
+ * Redimensiona proporcionalmente a máx. 1000px y comprime a WebP <50KB (meta ≤48KB) antes de subir a Supabase Storage.
  * Las URLs externas (catálogos / Magnific / web) NO se tocan — se guardan como referencia directa.
  */
 
@@ -25,18 +25,19 @@ export const isExternalUrl = (src) => {
 };
 
 /**
- * Sube un Blob/File WebP a Supabase Storage y devuelve la URL pública permanente.
- * Si Supabase Storage no está disponible, hace fallback a dataUrl (no se rompe el flujo).
+ * Sube un Blob/File WebP a Supabase Storage con timeout de seguridad (10s)
+ * y devuelve la URL pública permanente.
+ * Si Supabase Storage falla o expira, retorna null de forma segura para permitir fallback sin bloqueos.
  * @param {Blob} blob - Blob WebP comprimido
  * @param {string} [fileName] - Nombre de archivo sugerido
- * @returns {Promise<string>} URL pública de Supabase o dataUrl como fallback
+ * @returns {Promise<string|null>} URL pública de Supabase o null
  */
 export const uploadToStorage = async (blob, fileName = null) => {
   try {
     const name = fileName || `prod_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.webp`;
     const path = `catalog/${name}`;
 
-    const { error } = await supabase.storage
+    const uploadPromise = supabase.storage
       .from(STORAGE_BUCKET)
       .upload(path, blob, {
         contentType: blob.type || 'image/webp',
@@ -44,8 +45,15 @@ export const uploadToStorage = async (blob, fileName = null) => {
         cacheControl: '31536000', // 1 año de caché CDN
       });
 
+    // Timeout de 10s para prevenir que el flujo quede congelado en móviles o conexiones lentas
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout de subida a Supabase Storage (10s)')), 10000)
+    );
+
+    const { error } = await Promise.race([uploadPromise, timeoutPromise]);
+
     if (error) {
-      console.warn('[imageOptimizer] Storage upload failed, using dataUrl fallback:', error.message);
+      console.warn('[imageOptimizer] Subida a Storage no disponible o fallida, usando fallback:', error.message);
       return null;
     }
 
@@ -55,29 +63,28 @@ export const uploadToStorage = async (blob, fileName = null) => {
 
     return publicData?.publicUrl || null;
   } catch (err) {
-    console.warn('[imageOptimizer] uploadToStorage exception:', err);
+    console.warn('[imageOptimizer] uploadToStorage exception/timeout:', err?.message || err);
     return null;
   }
 };
 
 export const imageOptimizer = {
   /**
-   * Comprime y redimensiona una imagen a formato WebP optimizado (máx. 1200px, ≤80KB).
-   * Centrado simétrico con fondo blanco limpio para presentación prémium en catálogo.
+   * Comprime y redimensiona una imagen a formato WebP optimizado (máx. 1000px, <50KB).
    * @param {File|Blob|string} imageSource - Archivo, Blob o DataURL/URL de la imagen
    * @param {Object} options - Parámetros de compresión
    * @returns {Promise<{ dataUrl: string, blob: Blob, originalSizeKb: number, compressedSizeKb: number, width: number, height: number, savingsPercent: number }>}
    */
   async compressToWebP(imageSource, options = {}) {
     const {
-      maxWidth = 1200,
-      maxHeight = 1200,
-      initialQuality = 0.80,
-      targetMaxKb = 80,
-      minQuality = 0.40,
-      forceSquare = true,
+      maxWidth = 1000,
+      maxHeight = 1000,
+      initialQuality = 0.78,
+      targetMaxKb = 48, // Estrictamente < 50 KB
+      minQuality = 0.38,
+      forceSquare = false, // Proporcional sin distorsión
       backgroundColor = '#FFFFFF',
-      padding = 24,
+      padding = 0,
     } = options;
 
     return new Promise((resolve, reject) => {
@@ -92,7 +99,9 @@ export const imageOptimizer = {
 
       const cleanup = () => {
         if (objectUrl) {
-          URL.revokeObjectURL(objectUrl);
+          try {
+            URL.revokeObjectURL(objectUrl);
+          } catch {}
           objectUrl = null;
         }
       };
@@ -101,11 +110,9 @@ export const imageOptimizer = {
         try {
           let canvasWidth = maxWidth;
           let canvasHeight = maxHeight;
-
           let dw, dh, dx, dy;
 
           if (forceSquare) {
-            // Lienzo cuadrado uniforme (máx 1000x1000)
             canvasWidth = maxWidth;
             canvasHeight = maxHeight;
 
@@ -119,22 +126,21 @@ export const imageOptimizer = {
             dx = Math.round((canvasWidth - dw) / 2);
             dy = Math.round((canvasHeight - dh) / 2);
           } else {
-            // Proporcional sin lienzo forzado
             let { width, height } = img;
             if (width > maxWidth || height > maxHeight) {
               const ratio = Math.min(maxWidth / width, maxHeight / height);
               width = Math.round(width * ratio);
               height = Math.round(height * ratio);
             }
-            canvasWidth = width;
-            canvasHeight = height;
-            dw = width;
-            dh = height;
+            canvasWidth = Math.max(1, width);
+            canvasHeight = Math.max(1, height);
+            dw = canvasWidth;
+            dh = canvasHeight;
             dx = 0;
             dy = 0;
           }
 
-          // 2. Renderizar en Canvas de alto rendimiento
+          // Renderizar en Canvas de alto rendimiento
           const canvas = document.createElement('canvas');
           canvas.width = canvasWidth;
           canvas.height = canvasHeight;
@@ -150,37 +156,50 @@ export const imageOptimizer = {
 
           ctx.drawImage(img, dx, dy, dw, dh);
 
-          // 3. Compresión adaptativa WebP con meta estricta < 40KB
+          // Compresión adaptativa WebP con meta estricta < 50KB (target 48KB)
+          const targetBytes = targetMaxKb * 1024;
           let quality = initialQuality;
           let blob = await new Promise((res) => canvas.toBlob(res, 'image/webp', quality));
 
-          // Ajuste iterativo descendente si supera el objetivo de 40KB
-          while (blob && blob.size > targetMaxKb * 1024 && quality > minQuality) {
+          // 1. Ajuste iterativo descendente de calidad
+          while (blob && blob.size > targetBytes && quality > minQuality) {
             quality -= 0.08;
-            blob = await new Promise((res) => canvas.toBlob(res, 'image/webp', quality));
+            blob = await new Promise((res) => canvas.toBlob(res, 'image/webp', Math.max(quality, minQuality)));
           }
 
-          // Si aún excede 40KB, reducir resolución progresivamente para garantizar < 40KB
-          if (blob && blob.size > targetMaxKb * 1024) {
+          // 2. Si todavía supera los 48KB, redimensionar progresivamente el lienzo
+          if (blob && blob.size > targetBytes) {
+            const scaleFactor = Math.sqrt(targetBytes / blob.size) * 0.94;
+            const targetDimW = Math.max(360, Math.round(canvasWidth * scaleFactor));
+            const targetDimH = Math.max(360, Math.round(canvasHeight * scaleFactor));
+
             const downScaleCanvas = document.createElement('canvas');
-            const targetDim = 800;
-            downScaleCanvas.width = targetDim;
-            downScaleCanvas.height = targetDim;
+            downScaleCanvas.width = targetDimW;
+            downScaleCanvas.height = targetDimH;
             const downCtx = downScaleCanvas.getContext('2d');
             downCtx.imageSmoothingEnabled = true;
             downCtx.imageSmoothingQuality = 'high';
-            downCtx.drawImage(canvas, 0, 0, targetDim, targetDim);
+            if (backgroundColor) {
+              downCtx.fillStyle = backgroundColor;
+              downCtx.fillRect(0, 0, targetDimW, targetDimH);
+            }
+            downCtx.drawImage(canvas, 0, 0, targetDimW, targetDimH);
+
             blob = await new Promise((res) => downScaleCanvas.toBlob(res, 'image/webp', 0.65));
+
+            if (blob && blob.size > targetBytes) {
+              blob = await new Promise((res) => downScaleCanvas.toBlob(res, 'image/webp', 0.50));
+            }
           }
 
           // Fallback a JPEG si el navegador antiguo no soporta WebP
           if (!blob) {
-            blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.75));
+            blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.70));
           }
 
           const compressedSizeKb = Math.round((blob?.size || 0) / 1024);
           if (!originalSizeKb) {
-            originalSizeKb = compressedSizeKb * 3;
+            originalSizeKb = Math.max(compressedSizeKb, compressedSizeKb * 2.5);
           }
 
           const savingsPercent = originalSizeKb > compressedSizeKb
@@ -201,6 +220,10 @@ export const imageOptimizer = {
               mimeType: blob?.type || 'image/webp',
             });
           };
+          reader.onerror = () => {
+            cleanup();
+            reject(new Error('Error leyendo blob comprimido'));
+          };
           reader.readAsDataURL(blob);
         } catch (err) {
           cleanup();
@@ -219,6 +242,7 @@ export const imageOptimizer = {
       } else if (typeof imageSource === 'string') {
         img.src = imageSource;
       } else {
+        cleanup();
         reject(new Error('Tipo de fuente de imagen inválido.'));
       }
     });
@@ -239,7 +263,7 @@ export const imageOptimizer = {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        const compressed = await this.compressToWebP(file, { forceSquare: true });
+        const compressed = await this.compressToWebP(file, { forceSquare: false });
         results.push({
           file,
           fileName: file.name || `image_${i + 1}.webp`,
@@ -272,52 +296,58 @@ export const imageOptimizer = {
 
   /**
    * Pipeline completo para imágenes locales (File/Blob):
-   *   1. Comprime a WebP ≤80KB (máx. 1200px)
-   *   2. Sube a Supabase Storage → retorna URL pública CDN
-   *   3. Si Storage falla → retorna dataUrl como fallback seguro
+   *   1. Comprime a WebP <50KB (meta ≤48KB, máx. 1000px)
+   *   2. Sube a Supabase Storage con timeout seguro (10s) → retorna URL pública CDN
+   *   3. Si Storage falla/expira → retorna dataUrl comprimido (<50KB) como fallback seguro
    *
    * Las URLs externas (http/https) NO deben pasar por aquí — usar isExternalUrl().
    *
    * @param {File|Blob} file
    * @param {string} [fileName]
-   * @returns {Promise<{ url: string, isStorageUrl: boolean, compressedSizeKb: number, savingsPercent: number }>}
+   * @returns {Promise<{ url: string, isStorageUrl: boolean, dataUrl: string, compressedSizeKb: number, savingsPercent: number }>}
    */
   async processLocalImage(file, fileName = null) {
-    // 1. Comprimir
-    const compressed = await this.compressToWebP(file, {
-      maxWidth: 1200,
-      maxHeight: 1200,
-      initialQuality: 0.80,
-      targetMaxKb: 80,
-      forceSquare: false, // preservar proporción original para catálogo
-      backgroundColor: '#FFFFFF',
-      padding: 0,
-    });
+    try {
+      // 1. Comprimir estrictamente a WebP <50KB
+      const compressed = await this.compressToWebP(file, {
+        maxWidth: 1000,
+        maxHeight: 1000,
+        initialQuality: 0.78,
+        targetMaxKb: 48,
+        minQuality: 0.38,
+        forceSquare: false, // Preservar proporción original para catálogo
+        backgroundColor: '#FFFFFF',
+        padding: 0,
+      });
 
-    // 2. Intentar subir a Supabase Storage
-    const baseName = fileName
-      ? fileName.replace(/\.[^.]+$/, '')
-      : `img_${Date.now()}`;
-    const storageName = `${baseName}_${Date.now()}.webp`;
-    const publicUrl = await uploadToStorage(compressed.blob, storageName);
+      // 2. Intentar subir a Supabase Storage
+      const baseName = fileName
+        ? fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_')
+        : `img_${Date.now()}`;
+      const storageName = `${baseName}_${Date.now()}.webp`;
+      const publicUrl = await uploadToStorage(compressed.blob, storageName);
 
-    if (publicUrl) {
+      if (publicUrl) {
+        return {
+          url: publicUrl,
+          isStorageUrl: true,
+          dataUrl: compressed.dataUrl,
+          compressedSizeKb: compressed.compressedSizeKb,
+          savingsPercent: compressed.savingsPercent,
+        };
+      }
+
+      // 3. Fallback: dataUrl WebP ultraligero (<50KB)
       return {
-        url: publicUrl,
-        isStorageUrl: true,
-        dataUrl: compressed.dataUrl, // para previsualización inmediata
+        url: compressed.dataUrl,
+        isStorageUrl: false,
+        dataUrl: compressed.dataUrl,
         compressedSizeKb: compressed.compressedSizeKb,
         savingsPercent: compressed.savingsPercent,
       };
+    } catch (err) {
+      console.warn('[imageOptimizer] processLocalImage error:', err);
+      throw err;
     }
-
-    // 3. Fallback: dataUrl (funcional, aunque pesa más)
-    return {
-      url: compressed.dataUrl,
-      isStorageUrl: false,
-      dataUrl: compressed.dataUrl,
-      compressedSizeKb: compressed.compressedSizeKb,
-      savingsPercent: compressed.savingsPercent,
-    };
   },
 };

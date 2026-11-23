@@ -167,7 +167,19 @@ const ChipButton = ({ active, onClick, children, title }) => (
   </button>
 );
 
-export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmin = false }) => {
+export const SocialShareModal = ({
+  isOpen,
+  onClose,
+  product: initialProduct,
+  config = {},
+  isAdmin = false,
+  onProductUpdated,
+}) => {
+  const [product, setProduct] = useState(initialProduct);
+
+  useEffect(() => {
+    setProduct(initialProduct);
+  }, [initialProduct]);
   const {
     isAdmin: contextIsAdmin,
     isPrimary,
@@ -273,6 +285,31 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
       notify('badge-save-err', 'No se pudo guardar en Supabase. Intenta nuevamente.');
     } finally {
       setIsSavingBadge(false);
+    }
+  };
+
+  const handleSetCoverInShareModal = async (targetUrl) => {
+    if (!targetUrl || !product) return;
+    const allImgs = Array.isArray(product.images) && product.images.length > 0
+      ? product.images
+      : [product.image || targetUrl];
+    const reordered = [targetUrl, ...allImgs.filter((u) => u !== targetUrl)];
+    const updated = {
+      ...product,
+      image: targetUrl,
+      images: reordered,
+      additional_images: reordered.slice(1),
+    };
+    setProduct(updated);
+    setImageIndex(0);
+
+    try {
+      await storeService.updateProductAtomic(updated);
+      notify('cover-save', '★ Portada Principal actualizada y sincronizada en el catálogo.');
+      if (onProductUpdated) onProductUpdated(updated);
+    } catch (err) {
+      console.warn('Error guardando portada desde SocialShareModal:', err);
+      notify('cover-err', 'No se pudo guardar la portada en Supabase: ' + (err.message || ''));
     }
   };
 
@@ -1162,36 +1199,63 @@ export const SocialShareModal = ({ isOpen, onClose, product, config = {}, isAdmi
               </div>
 
               {/* Selector Rápido de Fotos de la Pieza (Fijo debajo de la tarjeta) */}
-              {hasMarketingAccess && images.length > 1 && (
-                <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-2xs">
-                  <p className="flex items-center gap-1.5 text-[10px] font-mono-code font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                    <ImageIcon className="w-3 h-3 text-[#0A6CFF]" />
-                    Foto de la pieza ({images.length} fotos)
-                  </p>
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    {images.slice(0, 8).map((url, index) => (
-                      <button
-                        key={`${url.slice(0, 40)}-${index}`}
-                        type="button"
-                        onClick={() => setImageIndex(index)}
-                        aria-pressed={imageIndex === index}
-                        className={`relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-lg border bg-white p-0.5 transition-all cursor-pointer ${
-                          imageIndex === index
-                            ? 'border-[#0A6CFF] ring-2 ring-[#0A6CFF]/20'
-                            : 'border-slate-200 hover:border-slate-300'
-                        }`}
-                        aria-label={`Seleccionar imagen ${index + 1}`}
-                      >
-                        <img
-                          src={url}
-                          alt=""
-                          className="h-full w-full object-contain"
-                          onError={(event) => {
-                            event.currentTarget.src = '/zafra/logo-menu.webp';
-                          }}
-                        />
-                      </button>
-                    ))}
+              {images.length > 1 && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-2xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="flex items-center gap-1.5 text-[10px] font-mono-code font-bold uppercase tracking-wider text-slate-700">
+                      <ImageIcon className="w-3.5 h-3.5 text-[#0A6CFF]" />
+                      Galería de fotos ({images.length} disponibles)
+                    </p>
+                    <span className="text-[9px] text-slate-400">
+                      Toca para cambiar la foto activa del estado 9:16
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 pt-1 px-0.5">
+                    {images.map((url, index) => {
+                      const isCover = (product?.image === url || index === 0);
+                      const isSelectedOnCard = imageIndex === index;
+
+                      return (
+                        <div
+                          key={`${url.slice(0, 40)}-${index}`}
+                          className={`relative group/shareThumb flex-shrink-0 w-16 h-16 rounded-xl border-2 p-1 bg-white transition-all cursor-pointer ${
+                            isSelectedOnCard
+                              ? 'border-[#0A6CFF] ring-2 ring-[#0A6CFF]/20 shadow-xs scale-[1.03]'
+                              : 'border-slate-200 hover:border-slate-300'
+                          }`}
+                          onClick={() => setImageIndex(index)}
+                          title={`Ver foto ${index + 1} en la tarjeta`}
+                        >
+                          <img
+                            src={url}
+                            alt=""
+                            className="h-full w-full object-contain rounded-lg"
+                            onError={(event) => {
+                              event.currentTarget.src = '/zafra/logo-menu.webp';
+                            }}
+                          />
+
+                          {/* Badge de Portada o Botón Usar como Portada */}
+                          {isCover ? (
+                            <span className="absolute -top-1.5 -left-1.5 px-1 py-0.2 rounded-md bg-emerald-600 text-[7px] font-black tracking-wide text-white shadow-2xs select-none">
+                              ★ Portada
+                            </span>
+                          ) : hasMarketingAccess ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSetCoverInShareModal(url);
+                              }}
+                              className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-md bg-slate-900 hover:bg-[#0A6CFF] text-[7px] font-bold text-white shadow-xs opacity-0 group-hover/shareThumb:opacity-100 transition-opacity whitespace-nowrap z-10"
+                              title="Marcar como Portada Principal del catálogo"
+                            >
+                              Usar como Portada
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

@@ -494,6 +494,29 @@ export const ProductModal = ({
     }
   };
 
+  const handleSetAsCover = async (e, index) => {
+    e?.stopPropagation();
+    if (index === 0 || !galleryImages[index]) return;
+    const targetUrl = galleryImages[index];
+    const reordered = [targetUrl, ...galleryImages.filter((_, idx) => idx !== index)];
+
+    setSelectedImageIndex(0);
+    if (onUpdateProductField) {
+      onUpdateProductField('image', targetUrl);
+      onUpdateProductField('images', reordered);
+    }
+    try {
+      await storeService.updateProductAtomic({
+        ...product,
+        image: targetUrl,
+        images: reordered,
+      });
+      if (onRefetchProducts) onRefetchProducts();
+    } catch (err) {
+      console.warn('Error fijando portada:', err);
+    }
+  };
+
   const handleSaveWarranty = async () => {
     const finalVal = warrantyVal.trim() || 'Garantía Oficial 12 Meses';
     if (onUpdateProductField) {
@@ -668,13 +691,24 @@ export const ProductModal = ({
                         />
 
                         {isMainSlot && (
-                          <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.2 rounded-md bg-blue-600 text-[8px] font-mono-code font-bold uppercase tracking-wider text-white shadow-2xs">
-                            PORTADA
+                          <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.5 rounded-md bg-emerald-600 text-[8px] font-mono-code font-bold uppercase tracking-wider text-white shadow-2xs">
+                            ★ PORTADA
                           </span>
                         )}
 
                         {canEdit && (
-                          <div className="absolute inset-0 bg-slate-900/60 rounded-xl opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1 z-10">
+                          <div className="absolute inset-0 bg-slate-900/65 rounded-xl opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1 z-10 p-1">
+                            {!isMainSlot && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleSetAsCover(e, idx)}
+                                className="px-1.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[8px] shadow-sm transition-colors whitespace-nowrap"
+                                title="Usar esta foto como Portada Principal"
+                              >
+                                ★ Portada
+                              </button>
+                            )}
+
                             <button
                               type="button"
                               onClick={(e) => handleOpenImageSlotPicker(e, idx)}
@@ -1275,6 +1309,13 @@ export const ProductModal = ({
             config={config}
             isAdmin={isAdmin}
             onClose={() => setIsShareOpen(false)}
+            onProductUpdated={(updated) => {
+              if (onUpdateProductField) {
+                onUpdateProductField('image', updated.image);
+                onUpdateProductField('images', updated.images);
+              }
+              if (onRefetchProducts) onRefetchProducts();
+            }}
           />
         </React.Suspense>
       )}

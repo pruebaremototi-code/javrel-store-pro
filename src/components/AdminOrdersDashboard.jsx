@@ -919,24 +919,29 @@ export const AdminOrdersDashboard = ({
 
     setIsUploadingImage(true);
     try {
-      showNotification('Comprimiendo y optimizando foto a WebP...');
-      const optimized = await imageOptimizer.compressToWebP(file, {
-        maxWidth: 800,
-        maxHeight: 800,
-        initialQuality: 0.85,
-        targetMaxKb: 65,
-      });
+      showNotification('Comprimiendo foto a WebP (<50KB) y subiendo al CDN...');
+      const result = await imageOptimizer.processLocalImage(file, file.name);
 
-      setEditingProduct((prev) => ({
-        ...prev,
-        image: optimized.dataUrl,
-      }));
-      showNotification(`¡Foto WebP optimizada (~${optimized.compressedSizeKb} KB)!`);
+      setEditingProduct((prev) => {
+        if (!prev) return prev;
+        const currentImages = Array.isArray(prev.images) && prev.images.length > 0
+          ? prev.images
+          : [prev.image || result.url];
+        const reordered = [result.url, ...currentImages.filter((u) => u !== result.url)];
+        return {
+          ...prev,
+          image: result.url,
+          images: reordered,
+          additional_images: reordered.slice(1),
+        };
+      });
+      showNotification(`¡Foto WebP optimizada (~${result.compressedSizeKb} KB) y fijada como Portada!`);
     } catch (err) {
       console.warn('Error comprimiendo foto:', err);
-      alert('Error al optimizar imagen: ' + err.message);
+      showNotification('Error al optimizar imagen: ' + (err.message || 'Error desconocido'), 'error');
     } finally {
       setIsUploadingImage(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -1318,67 +1323,100 @@ export const AdminOrdersDashboard = ({
             </div>
 
             {/* Galería de Múltiples Imágenes (Principal + Secundarias) */}
-            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
               <div className="flex items-center justify-between">
                 <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
                   <Images className="w-3.5 h-3.5 text-[#0A6CFF]" />
                   <span>Galería de Múltiples Fotos ({Array.isArray(editingProduct.images) ? editingProduct.images.length : 1})</span>
                 </label>
                 <span className="text-[10px] text-slate-500">
-                  Haz clic en una miniatura para fijarla como Principal
+                  Usa "Usar como Portada" para fijar la foto protagonista
                 </span>
               </div>
 
-              {/* Tira de Miniaturas */}
-              <div className="flex items-center gap-2 overflow-x-auto py-1">
+              {/* Tira de Miniaturas con Selección Directa de Portada */}
+              <div className="flex items-center gap-3 overflow-x-auto py-2 px-1">
                 {(Array.isArray(editingProduct.images) && editingProduct.images.length > 0
                   ? editingProduct.images
                   : [editingProduct.image || '/zafra/logo-menu.webp']
-                ).map((imgUrl, imgIdx) => (
-                  <div
-                    key={imgIdx}
-                    className={`relative group/slot flex-shrink-0 w-16 h-16 rounded-xl border-2 p-1 bg-white transition-all cursor-pointer ${
-                      (editingProduct.image === imgUrl || imgIdx === 0)
-                        ? 'border-[#0A6CFF] shadow-sm ring-2 ring-[#0A6CFF]/20'
-                        : 'border-slate-200 hover:border-slate-400'
-                    }`}
-                    onClick={() => {
-                      const currentList = Array.isArray(editingProduct.images) ? [...editingProduct.images] : [editingProduct.image];
-                      const reordered = [imgUrl, ...currentList.filter((x, idx) => idx !== imgIdx)];
-                      setEditingProduct({
-                        ...editingProduct,
-                        image: imgUrl,
-                        images: reordered,
-                        additional_images: reordered.slice(1),
-                      });
-                    }}
-                    title={imgIdx === 0 ? 'Foto Principal' : 'Haz clic para hacer Principal'}
-                  >
-                    <img src={imgUrl} alt={`Foto ${imgIdx + 1}`} className="w-full h-full object-contain rounded-lg" />
-                    {imgIdx === 0 ? (
-                      <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.2 rounded-md bg-[#0A6CFF] text-[8px] font-bold text-white shadow-2xs">
-                        Ppal
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const updated = (editingProduct.images || []).filter((_, idx) => idx !== imgIdx);
+                ).map((imgUrl, imgIdx) => {
+                  const isCover = (editingProduct.image === imgUrl || imgIdx === 0);
+                  return (
+                    <div
+                      key={imgIdx}
+                      className={`relative group/slot flex-shrink-0 w-20 h-20 rounded-2xl border-2 p-1 bg-white transition-all shadow-xs ${
+                        isCover
+                          ? 'border-[#0A6CFF] ring-2 ring-[#0A6CFF]/20 shadow-md'
+                          : 'border-slate-200 hover:border-slate-400'
+                      }`}
+                    >
+                      <img
+                        src={imgUrl}
+                        alt={`Foto ${imgIdx + 1}`}
+                        className="w-full h-full object-contain rounded-xl cursor-pointer"
+                        onClick={() => {
+                          const currentList = Array.isArray(editingProduct.images) ? [...editingProduct.images] : [editingProduct.image];
+                          const reordered = [imgUrl, ...currentList.filter((_, idx) => idx !== imgIdx)];
                           setEditingProduct({
                             ...editingProduct,
-                            images: updated,
-                            additional_images: updated.slice(1),
+                            image: imgUrl,
+                            images: reordered,
+                            additional_images: reordered.slice(1),
                           });
+                          showNotification('★ Imagen seleccionada como Portada Principal');
                         }}
-                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity shadow-xs"
-                        title="Quitar foto de la galería"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
+                        title="Haz clic para seleccionar como Portada Principal"
+                      />
+
+                      {/* Insignia / Botón Usar como Portada */}
+                      {isCover ? (
+                        <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-emerald-600 text-[8px] font-black tracking-wide text-white shadow-sm flex items-center gap-0.5 select-none pointer-events-none whitespace-nowrap">
+                          ★ Portada
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const currentList = Array.isArray(editingProduct.images) ? [...editingProduct.images] : [editingProduct.image];
+                            const reordered = [imgUrl, ...currentList.filter((_, idx) => idx !== imgIdx)];
+                            setEditingProduct({
+                              ...editingProduct,
+                              image: imgUrl,
+                              images: reordered,
+                              additional_images: reordered.slice(1),
+                            });
+                            showNotification('★ Imagen seleccionada como Portada Principal');
+                          }}
+                          className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-slate-900 hover:bg-[#0A6CFF] text-[8px] font-bold text-white shadow-md transition-all whitespace-nowrap cursor-pointer hover:scale-105 z-10"
+                          title="Fijar como Portada Principal"
+                        >
+                          Usar como Portada
+                        </button>
+                      )}
+
+                      {/* Botón Quitar Foto (si no es la única) */}
+                      {!isCover && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const updated = (editingProduct.images || []).filter((_, idx) => idx !== imgIdx);
+                            setEditingProduct({
+                              ...editingProduct,
+                              images: updated,
+                              additional_images: updated.slice(1),
+                            });
+                          }}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity shadow-xs hover:bg-rose-600"
+                          title="Quitar foto de la galería"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -4880,6 +4918,10 @@ export const AdminOrdersDashboard = ({
           config={config}
           isAdmin
           onClose={() => setShareProduct(null)}
+          onProductUpdated={(updated) => {
+            setShareProduct(updated);
+            if (onRefetchProducts) onRefetchProducts();
+          }}
         />
       )}
 

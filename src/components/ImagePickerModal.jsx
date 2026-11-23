@@ -91,6 +91,9 @@ export const ImagePickerModal = ({ isOpen, currentImage, onSave, onClose }) => {
       reader.readAsDataURL(file);
     } finally {
       setIsCompressing(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -219,7 +222,7 @@ export const ImagePickerModal = ({ isOpen, currentImage, onSave, onClose }) => {
             {/* Recuadro informativo: flujo dual */}
             <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-3.5 py-2.5 text-[10px] text-slate-600 leading-relaxed space-y-1">
               <p className="font-black uppercase tracking-wider text-[#0A6CFF] text-[9px] mb-1">📌 Gestión de imágenes</p>
-              <p><span className="font-bold text-emerald-700">Archivo local (PC / Móvil):</span> se comprime a WebP ≤80KB y se sube al CDN de Supabase. Se guarda la URL pública — sin base64.</p>
+              <p><span className="font-bold text-emerald-700">Archivo local (PC / Móvil):</span> se comprime a WebP &lt;50KB y se sube al CDN de Supabase. Se guarda la URL pública — sin cadenas base64 pesadas.</p>
               <p><span className="font-bold text-blue-700">URL externa (web / catálogo):</span> se guarda como referencia directa sin modificación.</p>
             </div>
 

@@ -556,6 +556,12 @@ export const ProductCard = ({
             config={config}
             isAdmin={Boolean(isAdmin || contextIsAdmin)}
             onClose={() => setIsShareOpen(false)}
+            onProductUpdated={(updated) => {
+              if (onUpdateProductField) {
+                onUpdateProductField('image', updated.image);
+                onUpdateProductField('images', updated.images);
+              }
+            }}
           />
         </Suspense>
       )}
