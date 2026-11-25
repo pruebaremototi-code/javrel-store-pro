@@ -8,22 +8,27 @@ const USD_EXCHANGE_RATE = Math.max(1000, Number(import.meta.env.VITE_USD_EXCHANG
 const hasValidPayPalClientId =
   Boolean(PAYPAL_CLIENT_ID) && !PAYPAL_CLIENT_ID.includes('tu_paypal_client_id');
 
+let paypalSdkPromise = null;
+
 /**
- * Carga dinámica del SDK oficial de PayPal (sin redirecciones a WhatsApp).
+ * Carga única (singleton) del SDK oficial de PayPal.
  */
 const loadPayPalSdk = (clientId) => {
   if (typeof window === 'undefined') return Promise.reject(new Error('No window'));
   if (window.paypal?.Buttons) return Promise.resolve(window.paypal);
+  if (paypalSdkPromise) return paypalSdkPromise;
 
-  const existing = document.querySelector('script[data-javrel-paypal-sdk="true"]');
-  if (existing) {
-    return new Promise((resolve, reject) => {
+  paypalSdkPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-javrel-paypal-sdk="true"]');
+    if (existing) {
       existing.addEventListener('load', () => resolve(window.paypal));
-      existing.addEventListener('error', () => reject(new Error('Error cargando SDK de PayPal')));
-    });
-  }
+      existing.addEventListener('error', () => {
+        paypalSdkPromise = null;
+        reject(new Error('Error cargando SDK de PayPal'));
+      });
+      return;
+    }
 
-  return new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(
       clientId
@@ -34,12 +39,18 @@ const loadPayPalSdk = (clientId) => {
       if (window.paypal?.Buttons) {
         resolve(window.paypal);
       } else {
+        paypalSdkPromise = null;
         reject(new Error('PayPal SDK no inicializó correctamente.'));
       }
     };
-    script.onerror = () => reject(new Error('No se pudo conectar con PayPal.'));
+    script.onerror = () => {
+      paypalSdkPromise = null;
+      reject(new Error('No se pudo conectar con PayPal.'));
+    };
     document.body.appendChild(script);
   });
+
+  return paypalSdkPromise;
 };
 
 export const PayPalInlineSection = ({
@@ -50,12 +61,34 @@ export const PayPalInlineSection = ({
 }) => {
   const paypalContainerRef = useRef(null);
   const cardContainerRef = useRef(null);
+  const buttonInstancesRef = useRef([]);
+  const hasRenderedRef = useRef(false);
+
   const [sdkStatus, setSdkStatus] = useState(hasValidPayPalClientId ? 'loading' : 'unconfigured');
   const [sdkError, setSdkError] = useState('');
 
   const baseUSD = Number((Math.max(0, Number(totalCOP) || 0) / USD_EXCHANGE_RATE).toFixed(2));
   const paypalFeeUSD = Number((baseUSD * 0.054 + 0.3).toFixed(2));
   const totalUSD = Number((baseUSD + paypalFeeUSD).toFixed(2));
+
+  // Refs estables para evitar re-renders o desmontaje de los contenedores de PayPal
+  const latestPayloadRef = useRef({
+    orderReference,
+    totalUSD,
+    baseUSD,
+    paypalFeeUSD,
+    onPayPalApproved,
+  });
+
+  useEffect(() => {
+    latestPayloadRef.current = {
+      orderReference,
+      totalUSD,
+      baseUSD,
+      paypalFeeUSD,
+      onPayPalApproved,
+    };
+  }, [orderReference, totalUSD, baseUSD, paypalFeeUSD, onPayPalApproved]);
 
   useEffect(() => {
     if (!hasValidPayPalClientId) return undefined;
@@ -64,25 +97,29 @@ export const PayPalInlineSection = ({
 
     loadPayPalSdk(PAYPAL_CLIENT_ID)
       .then((paypal) => {
-        if (effectState.cancelled) return;
+        if (effectState.cancelled || hasRenderedRef.current) return;
+        const paypalNode = paypalContainerRef.current;
+        const cardNode = cardContainerRef.current;
+        if (!paypalNode || !cardNode) return;
+
+        hasRenderedRef.current = true;
         setSdkStatus('ready');
         setSdkError('');
 
-        const renderButtons = (container, fundingSource, style) => {
-          if (!container) return;
-          container.innerHTML = '';
-          const buttons = paypal.Buttons({
+        const mountButton = (container, fundingSource, style) => {
+          const instance = paypal.Buttons({
             fundingSource,
             style,
             createOrder: (_data, actions) => {
+              const current = latestPayloadRef.current;
               return actions.order.create({
                 purchase_units: [
                   {
-                    reference_id: orderReference,
-                    description: `Pedido JavrelStore ${orderReference}`,
+                    reference_id: current.orderReference,
+                    description: `Pedido JavrelStore ${current.orderReference}`,
                     amount: {
                       currency_code: 'USD',
-                      value: totalUSD.toFixed(2),
+                      value: current.totalUSD.toFixed(2),
                     },
                   },
                 ],
@@ -90,12 +127,13 @@ export const PayPalInlineSection = ({
             },
             onApprove: async (_data, actions) => {
               const details = await actions.order.capture();
-              onPayPalApproved({
-                transactionId: details?.id || orderReference,
+              const current = latestPayloadRef.current;
+              current.onPayPalApproved?.({
+                transactionId: details?.id || current.orderReference,
                 payerEmail: details?.payer?.email_address || '',
-                totalUSD,
-                baseUSD,
-                paypalFeeUSD,
+                totalUSD: current.totalUSD,
+                baseUSD: current.baseUSD,
+                paypalFeeUSD: current.paypalFeeUSD,
                 rawDetails: details,
               });
             },
@@ -105,12 +143,17 @@ export const PayPalInlineSection = ({
             },
           });
 
-          if (buttons.isEligible()) {
-            buttons.render(container);
+          if (instance.isEligible()) {
+            buttonInstancesRef.current.push(instance);
+            instance.render(container).catch((renderErr) => {
+              if (!effectState.cancelled) {
+                console.warn('[PayPal Render Warning]', renderErr);
+              }
+            });
           }
         };
 
-        renderButtons(paypalContainerRef.current, paypal.FUNDING.PAYPAL, {
+        mountButton(paypalNode, paypal.FUNDING.PAYPAL, {
           layout: 'vertical',
           color: 'gold',
           shape: 'pill',
@@ -118,7 +161,7 @@ export const PayPalInlineSection = ({
           height: 46,
         });
 
-        renderButtons(cardContainerRef.current, paypal.FUNDING.CARD, {
+        mountButton(cardNode, paypal.FUNDING.CARD, {
           layout: 'vertical',
           color: 'black',
           shape: 'pill',
@@ -133,8 +176,20 @@ export const PayPalInlineSection = ({
 
     return () => {
       effectState.cancelled = true;
+      hasRenderedRef.current = false;
+      const instances = buttonInstancesRef.current;
+      buttonInstancesRef.current = [];
+      instances.forEach((inst) => {
+        try {
+          if (typeof inst?.close === 'function') {
+            inst.close().catch(() => {});
+          }
+        } catch {
+          // Ignorar errores al cerrar instancia desmontada
+        }
+      });
     };
-  }, [orderReference, totalUSD, baseUSD, paypalFeeUSD, onPayPalApproved]);
+  }, []);
 
   return (
     <div className="space-y-3.5 animate-fadeIn">
@@ -152,11 +207,10 @@ export const PayPalInlineSection = ({
         </div>
       )}
 
-      {sdkStatus === 'ready' && (
-        <div className="space-y-2.5">
-          {/* Botón amarillo oficial de PayPal */}
+      {/* Contenedores siempre montados en el DOM para evitar que PayPal pierda la referencia */}
+      {hasValidPayPalClientId && (
+        <div className={`space-y-2.5 ${sdkStatus === 'ready' ? 'block' : 'hidden'}`}>
           <div ref={paypalContainerRef} className="min-h-[48px]" />
-          {/* Botón negro oficial de Tarjeta de débito o crédito (despliega formulario embebido de PayPal) */}
           <div ref={cardContainerRef} className="min-h-[48px]" />
         </div>
       )}
@@ -191,10 +245,6 @@ export const PayPalInlineSection = ({
       )}
 
       <div className="text-center space-y-1 pt-1">
-        <p className="text-[11px] text-slate-500 italic">
-          Desarrollado por <span className="font-black text-[#003087] not-italic">Pay</span>
-          <span className="font-black text-[#0070BA] not-italic">Pal</span>
-        </p>
         <p className="text-[11px] text-slate-500">
           Pago internacional seguro con PayPal o tarjeta
         </p>
