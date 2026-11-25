@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { ShoppingBag, ChevronRight, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { ShoppingBag, ChevronRight } from 'lucide-react';
 import { formatCurrency } from '../services/storeService';
 
 export const FloatingCartWidget = ({
   cartItems = [],
   onOpenCart,
 }) => {
+  const [prevCount, setPrevCount] = useState(0);
   const [isBumping, setIsBumping] = useState(false);
 
   const totalCount = (Array.isArray(cartItems) ? cartItems : []).reduce(
@@ -18,13 +19,13 @@ export const FloatingCartWidget = ({
     0
   );
 
-  // Efecto de rebote sutil cuando cambia el número de productos
-  useEffect(() => {
-    if (totalCount === 0) return;
-    setIsBumping(true);
-    const timer = setTimeout(() => setIsBumping(false), 350);
-    return () => clearTimeout(timer);
-  }, [totalCount]);
+  if (totalCount !== prevCount) {
+    setPrevCount(totalCount);
+    if (totalCount > 0 && !isBumping) {
+      setIsBumping(true);
+      setTimeout(() => setIsBumping(false), 350);
+    }
+  }
 
   return (
     <button
@@ -36,11 +37,9 @@ export const FloatingCartWidget = ({
       }`}
       title="Ver Carrito de Compras y Checkout"
     >
-      {/* Icono de Carrito con Insignia Flotante */}
       <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-[#0052cc] via-[#0A6CFF] to-[#38bdf8] text-white flex items-center justify-center shadow-md shadow-blue-500/25 shrink-0 group-hover:scale-105 transition-transform">
         <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
 
-        {/* Contador flotante de productos en la esquina */}
         {totalCount > 0 ? (
           <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] px-1 bg-rose-500 text-white text-[10px] font-mono-code font-black rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-scaleUp">
             {totalCount > 99 ? '99+' : totalCount}
@@ -50,7 +49,6 @@ export const FloatingCartWidget = ({
         )}
       </div>
 
-      {/* Monto Acumulado y Estado en Tiempo Real */}
       <div className="text-left leading-tight hidden xs:block">
         <div className="flex items-center gap-1">
           <span className="text-[9px] font-mono-code font-bold uppercase tracking-wider text-slate-400 group-hover:text-[#0A6CFF] transition-colors">
@@ -63,7 +61,6 @@ export const FloatingCartWidget = ({
         </div>
       </div>
 
-      {/* Flechita sutil de despliegue */}
       <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#0A6CFF] group-hover:translate-x-0.5 transition-all shrink-0 hidden sm:block" />
     </button>
   );

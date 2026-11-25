@@ -25,16 +25,25 @@ const buildOrderPayload = (order, extended = true) => {
     payload.payment_provider = order.payment_provider || null;
     payload.payment_reference = order.payment_reference || null;
     payload.payment_payload = order.payment_payload || {};
+    payload.customer_document = order.customer_document || null;
+    payload.customer_department = order.customer_department || null;
+    payload.customer_city = order.customer_city || null;
+    payload.customer_address = order.customer_address || null;
+    payload.subtotal_amount = Number(order.subtotal_amount) || 0;
+    payload.shipping_cost = Number(order.shipping_cost) || 0;
+    payload.discount_amount = Number(order.discount_amount) || 0;
+    payload.coupon_code = order.coupon_code || null;
   }
 
   return payload;
 };
 
 export const orderService = {
-  // Generar código de referencia único para el pedido
+  // Generar código de referencia único para el pedido (unificado JVR-...)
   generateReference() {
-    const randomDigits = Math.floor(100000 + Math.random() * 900000);
-    return `SWOW-${randomDigits}`;
+    const timePart = Date.now().toString().slice(-6);
+    const randomDigits = Math.floor(1000 + Math.random() * 9000);
+    return `JVR-${timePart}-${randomDigits}`;
   },
 
   // Obtener registro de órdenes purgadas / eliminadas de raíz (Tombstones)
@@ -108,10 +117,19 @@ export const orderService = {
 
   // Crear una nueva orden
   async createOrder({
+    referenceCode: providedReferenceCode = '',
     customerName,
     customerEmail,
     customerPhone,
+    customerDocument = '',
+    customerDepartment = '',
+    customerCity = '',
+    customerAddress = '',
     items,
+    subtotalAmount = 0,
+    shippingCost = 0,
+    discountAmount = 0,
+    couponCode = '',
     totalAmount,
     paymentMethod,
     paymentProofUrl = null,
@@ -120,19 +138,27 @@ export const orderService = {
     paymentReference = '',
     paymentPayload = {},
     notes = '',
-    initialStatus = 'Pendiente',
+    initialStatus = 'pendiente_verificacion',
   }) {
-    const referenceCode = this.generateReference();
+    const referenceCode = String(providedReferenceCode || '').trim() || this.generateReference();
     const newOrder = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `ord-${Date.now()}`,
       reference_code: referenceCode,
       customer_name: customerName || 'Cliente Anónimo',
       customer_email: customerEmail || '',
       customer_phone: customerPhone || '',
+      customer_document: customerDocument || null,
+      customer_department: customerDepartment || null,
+      customer_city: customerCity || null,
+      customer_address: customerAddress || null,
       items_json: items || [],
+      subtotal_amount: Number(subtotalAmount) || 0,
+      shipping_cost: Number(shippingCost) || 0,
+      discount_amount: Number(discountAmount) || 0,
+      coupon_code: couponCode || null,
       total_amount: Number(totalAmount) || 0,
-      payment_method: paymentMethod || 'QR_CODE',
-      payment_status: initialStatus, // 'Pendiente' | 'Aprobado' | 'Rechazado'
+      payment_method: paymentMethod || 'QR_MANUAL',
+      payment_status: initialStatus, // 'pendiente_verificacion' | 'pagado' | 'Pendiente' | 'Aprobado' | 'Rechazado'
       payment_proof_url: paymentProofUrl,
       payment_operation_number: paymentOperationNumber || null,
       payment_provider: paymentProvider || null,

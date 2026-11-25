@@ -269,8 +269,17 @@ export const AdminOrdersDashboard = ({
     );
   });
 
+  const isPendingStatus = (status) =>
+    status === 'Pendiente' || status === 'pendiente_verificacion';
+  const isApprovedStatus = (status) =>
+    status === 'Aprobado' || status === 'pagado';
+
   const filteredOrders = orders.filter((o) => {
-    const matchesStatus = filterStatus === 'all' || o?.payment_status === filterStatus;
+    const matchesStatus =
+      filterStatus === 'all' ||
+      o?.payment_status === filterStatus ||
+      (filterStatus === 'Pendiente' && isPendingStatus(o?.payment_status)) ||
+      (filterStatus === 'Aprobado' && isApprovedStatus(o?.payment_status));
     const term = normalizeSearchText(searchTerm);
     const matchesSearch =
       !searchTerm ||
@@ -280,7 +289,7 @@ export const AdminOrdersDashboard = ({
     return matchesStatus && matchesSearch;
   });
 
-  const pendingOrdersCount = orders.filter((o) => o?.payment_status === 'Pendiente').length;
+  const pendingOrdersCount = orders.filter((o) => isPendingStatus(o?.payment_status)).length;
   const criticalStockCount = products.filter((p) => (Number(p?.stock) || 0) < 5).length;
 
   // Cálculos Financieros para Tarjetas de Métricas ERP (Estilo Pastel Enterprise)
@@ -290,13 +299,13 @@ export const AdminOrdersDashboard = ({
 
   const erpTotalPorCobrar = useMemo(() => {
     return orders
-      .filter((o) => o?.payment_status === 'Pendiente')
+      .filter((o) => isPendingStatus(o?.payment_status))
       .reduce((sum, o) => sum + (Number(o?.total_amount) || 0), 0);
   }, [orders]);
 
   const erpTotalVentasBrutas = useMemo(() => {
     return orders
-      .filter((o) => o?.payment_status === 'Aprobado')
+      .filter((o) => isApprovedStatus(o?.payment_status))
       .reduce((sum, o) => sum + (Number(o?.total_amount) || 0), 0);
   }, [orders]);
 
@@ -3260,8 +3269,8 @@ export const AdminOrdersDashboard = ({
               {filteredOrders.length > 0 ? (
                 <div className="space-y-3">
                   {filteredOrders.map((order) => {
-                    const isPending = order.payment_status === 'Pendiente';
-                    const isApproved = order.payment_status === 'Aprobado';
+                    const isPending = isPendingStatus(order.payment_status);
+                    const isApproved = isApprovedStatus(order.payment_status);
 
                     return (
                       <div

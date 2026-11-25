@@ -45,7 +45,7 @@ export default async function handler(req, res) {
       const tx = event.data?.transaction;
       if (!tx) return res.status(200).json({ received: true });
 
-      const reference = tx.reference;              // e.g. "JVR-1234567890-5678"
+      const reference = tx.reference;              // e.g. "JVR-842910-4821"
       const status = tx.status;                    // APPROVED | DECLINED | VOIDED | ERROR
       const amountInCents = tx.amount_in_cents;
       const paymentMethod = tx.payment_method_type; // NEQUI | PSE | CARD | BANCOLOMBIA_TRANSFER
@@ -58,10 +58,10 @@ export default async function handler(req, res) {
       // Mapear estado Wompi → estado interno JavrelStore
       const internalStatus =
         status === 'APPROVED'
-          ? 'Aprobado'
+          ? 'pagado'
           : status === 'DECLINED' || status === 'VOIDED'
             ? 'Rechazado'
-            : 'Pendiente';
+            : 'pendiente_verificacion';
 
       // Actualizar orden en Supabase si las credenciales están disponibles
       const supabaseUrl = process.env.SUPABASE_URL;
