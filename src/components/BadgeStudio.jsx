@@ -149,9 +149,41 @@ export const PROMO_SUGGESTIONS = [
 ];
 
 /**
+ * Extrae el objeto badgeConfig guardado (si existe en product.badgeConfig o product.specs)
+ */
+const readSavedBadgeConfig = (product) => {
+  if (product?.badgeConfig && typeof product.badgeConfig === 'object') {
+    return product.badgeConfig;
+  }
+  const specs = Array.isArray(product?.specs) ? product.specs : [];
+  const found = specs.find(
+    (s) => s && typeof s === 'object' && String(s.key || s.title || '').toUpperCase() === 'BADGE_CONFIG'
+  );
+  if (found?.value) {
+    try {
+      const parsed = typeof found.value === 'string' ? JSON.parse(found.value) : found.value;
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch {
+      // Ignorar JSON inválido
+    }
+  }
+  return null;
+};
+
+/**
  * Obtener estado por defecto de cada slot
  */
 export const getDefaultBadgeSlot = (slot, product) => {
+  const saved = readSavedBadgeConfig(product);
+  if (saved?.[slot] && typeof saved[slot] === 'object') {
+    return {
+      enabled: Boolean(saved[slot].enabled),
+      text: String(saved[slot].text || '').trim(),
+      position: saved[slot].position || (slot === 'primary' ? 'top-left' : 'bottom-right'),
+      palette: saved[slot].palette || (slot === 'primary' ? 'neon-blue' : 'emerald'),
+    };
+  }
+
   if (slot === 'primary') {
     const rawTag = product?.commercialTag || product?.badge || '';
     const hasTag = Boolean(rawTag && !/^(nuevo|usado|seminuevo)$/i.test(rawTag));
@@ -169,9 +201,8 @@ export const getDefaultBadgeSlot = (slot, product) => {
 
   // secondary = Condición física
   const rawCond = product?.condition;
-  const isCustomCond = Boolean(rawCond && rawCond !== 'Nuevo');
   return {
-    enabled: true, // visible para permitir configurar libremente
+    enabled: Boolean(rawCond),
     text: rawCond || 'NUEVO',
     position: 'bottom-right',
     palette: rawCond === 'Seminuevo' ? 'gold' : rawCond === 'Usado' ? 'platinum' : 'emerald',

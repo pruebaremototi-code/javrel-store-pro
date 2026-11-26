@@ -1528,6 +1528,137 @@ const drawGlassPanel = (ctx, x, y, width, height, radius, palette) => {
 /**
  * Dibuja un badge personalizado del studio con degradados de lujo y bordes translúcidos
  */
+const BADGE_CANVAS_PALETTES = {
+  'neon-blue': { bg: '#0A6CFF', gradTo: '#00D2FF', text: '#FFFFFF', border: 'rgba(0, 210, 255, 0.65)' },
+  gold: { bg: '#111111', gradTo: '#B45309', text: '#FDE047', border: 'rgba(253, 224, 71, 0.55)' },
+  emerald: { bg: '#064E3B', gradTo: '#10B981', text: '#ECFDF5', border: 'rgba(52, 211, 153, 0.55)' },
+  platinum: { bg: '#F1F5F9', gradTo: '#94A3B8', text: '#0F172A', border: 'rgba(255, 255, 255, 0.9)' },
+  lavender: { bg: '#4C1D95', gradTo: '#8B5CF6', text: '#FFFFFF', border: 'rgba(196, 181, 253, 0.55)' },
+  fire: { bg: '#DC2626', gradTo: '#F59E0B', text: '#FFFFFF', border: 'rgba(251, 146, 60, 0.65)' },
+  'rose-gold': { bg: '#9D174D', gradTo: '#F472B6', text: '#FFFFFF', border: 'rgba(244, 114, 182, 0.55)' },
+};
+
+/**
+ * Dibuja todos los badges activos en las 4 esquinas de una caja de imagen
+ * (top-left, top-right, bottom-left, bottom-right), apilándolos con separación
+ * limpia cuando varios comparten la misma esquina.
+ */
+const drawCornerBadgesStack = (
+  ctx,
+  boxX,
+  boxY,
+  boxW,
+  boxH,
+  data,
+  palette,
+  { scale = 1, includeAutoDiscount = false, includePhotoCount = false } = {}
+) => {
+  const groups = {
+    'top-left': [],
+    'top-right': [],
+    'bottom-left': [],
+    'bottom-right': [],
+  };
+  const push = (pos, item) => {
+    const safePos = groups[pos] ? pos : 'top-left';
+    groups[safePos].push(item);
+  };
+
+  const primary = data?.badgeConfig?.primary;
+  const secondary = data?.badgeConfig?.secondary;
+  const primaryText = primary?.enabled && primary?.text ? String(primary.text).trim().toUpperCase() : '';
+  const hasPrimaryDiscount = Boolean(primaryText && /^-\d+%$/.test(primaryText));
+
+  if (includeAutoDiscount && data?.discount > 0 && !hasPrimaryDiscount) {
+    push('top-left', {
+      text: `-${data.discount}%`,
+      pal: { bg: '#0A6CFF', gradTo: '#0056D2', text: '#FFFFFF', border: 'rgba(255,255,255,0.45)' },
+      isPrimary: true,
+    });
+  }
+
+  if (includePhotoCount && data?.photoCount > 1) {
+    push('top-right', {
+      text: `📷 ${data.photoCount}`,
+      pal: { bg: 'rgba(15,23,42,0.75)', text: '#FFFFFF', border: 'rgba(255,255,255,0.25)' },
+      isPrimary: false,
+      isMeta: true,
+    });
+  }
+
+  if (primaryText) {
+    const palId = primary.palette || 'theme';
+    const pal =
+      BADGE_CANVAS_PALETTES[palId] ||
+      { bg: palette.badgeBg || '#0A6CFF', text: palette.badgeText || '#FFFFFF', border: 'rgba(255,255,255,0.45)' };
+    push(primary.position || 'top-left', { text: primaryText, pal, isPrimary: true });
+  }
+
+  if (secondary?.enabled && secondary?.text) {
+    const secText = String(secondary.text).trim().toUpperCase();
+    if (secText) {
+      const palId = secondary.palette || 'theme';
+      const pal =
+        BADGE_CANVAS_PALETTES[palId] ||
+        { bg: palette.badgeBg || '#064E3B', text: palette.badgeText || '#FFFFFF', border: 'rgba(255,255,255,0.45)' };
+      push(secondary.position || 'bottom-right', { text: secText, pal, isPrimary: false });
+    }
+  }
+
+  const margin = Math.round(24 * scale);
+  const gap = Math.round(10 * scale);
+
+  Object.entries(groups).forEach(([corner, items]) => {
+    if (!items.length) return;
+    let cursorY = corner.startsWith('top') ? boxY + margin : boxY + boxH - margin;
+
+    items.forEach((item) => {
+      const fontSize = Math.round((item.isMeta ? 22 : item.isPrimary ? 25 : 22) * scale);
+      const font = item.isPrimary ? `800 ${fontSize}px ${FONT_HEAD}` : `700 ${fontSize}px ${FONT_HEAD}`;
+      const padX = Math.round((item.isPrimary ? 22 : 18) * scale);
+      const badgeH = Math.round((item.isMeta ? 42 : item.isPrimary ? 50 : 44) * scale);
+      const radius = Math.round(badgeH / 2);
+
+      ctx.save();
+      ctx.font = font;
+      const badgeW = ctx.measureText(item.text).width + padX * 2;
+
+      const bx = corner.endsWith('right') ? boxX + boxW - margin - badgeW : boxX + margin;
+      const by = corner.startsWith('top') ? cursorY : cursorY - badgeH;
+
+      ctx.shadowColor = 'rgba(0,0,0,0.28)';
+      ctx.shadowBlur = 12 * scale;
+      ctx.shadowOffsetY = 4 * scale;
+
+      if (item.pal.gradTo) {
+        const grad = ctx.createLinearGradient(bx, by, bx + badgeW, by + badgeH);
+        grad.addColorStop(0, item.pal.bg);
+        grad.addColorStop(1, item.pal.gradTo);
+        fillRoundRect(ctx, bx, by, badgeW, badgeH, radius, grad);
+      } else {
+        fillRoundRect(ctx, bx, by, badgeW, badgeH, radius, item.pal.bg);
+      }
+
+      ctx.shadowColor = 'transparent';
+      roundRect(ctx, bx, by, badgeW, badgeH, radius);
+      ctx.strokeStyle = item.pal.border || 'rgba(255,255,255,0.4)';
+      ctx.lineWidth = Math.max(1.5, 1.5 * scale);
+      ctx.stroke();
+
+      ctx.shadowColor = item.pal.text === '#0F172A' ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.75)';
+      ctx.shadowBlur = 3 * scale;
+      ctx.shadowOffsetY = 1.5 * scale;
+      ctx.fillStyle = item.pal.text;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(item.text, bx + badgeW / 2, by + badgeH / 2 + 1);
+      ctx.restore();
+
+      cursorY = corner.startsWith('top') ? by + badgeH + gap : by - gap;
+    });
+  });
+};
+
 const drawStudioCanvasBadge = (ctx, cardX, cardY, cardW, cardH, badge, palette, isPrimary = true) => {
   if (!badge || !badge.enabled || !badge.text) return;
   const text = String(badge.text).trim().toUpperCase();
@@ -1677,8 +1808,11 @@ const drawImageCard = (ctx, x, y, width, height, radius, image, data, palette) =
 
   // Si viene configuración explícita desde el Studio de Etiquetas
   if (data.badgeConfig) {
-    drawStudioCanvasBadge(ctx, x, y, width, height, data.badgeConfig.primary, palette, true);
-    drawStudioCanvasBadge(ctx, x, y, width, height, data.badgeConfig.secondary, palette, false);
+    drawCornerBadgesStack(ctx, x, y, width, height, data, palette, {
+      scale: 1,
+      includeAutoDiscount: false,
+      includePhotoCount: false,
+    });
   } else {
     // Comportamiento por defecto
     if (data.discount > 0) {
@@ -2135,31 +2269,12 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  // Badges sobre la imagen
-  if (data.discount > 0) {
-    const badgeText = `-${data.discount}%`;
-    ctx.save();
-    ctx.font = `800 32px ${FONT_HEAD}`;
-    const bW = ctx.measureText(badgeText).width + 32;
-    fillRoundRect(ctx, pad + 32, pad + 32, bW, 58, 16, '#0A6CFF');
-    ctx.fillStyle = '#FFFFFF';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(badgeText, pad + 32 + bW / 2, pad + 32 + 30);
-    ctx.restore();
-  }
-
-  if (data.photoCount > 1) {
-    ctx.save();
-    ctx.font = `700 26px ${FONT_HEAD}`;
-    const photoLabel = `📷 ${data.photoCount}`;
-    fillRoundRect(ctx, pad + cardW - 110, pad + 32, 78, 48, 12, 'rgba(15,23,42,0.7)');
-    ctx.fillStyle = '#FFFFFF';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(photoLabel, pad + cardW - 71, pad + 32 + 25);
-    ctx.restore();
-  }
+  // Badges sobre la imagen en las 4 esquinas (descuento, fotoCount + badgeConfig primary/secondary)
+  drawCornerBadgesStack(ctx, pad, pad, cardW, imgBoxH, data, palette, {
+    scale: 1.15,
+    includeAutoDiscount: true,
+    includePhotoCount: true,
+  });
 
   // ── 2. JERARQUÍA TEXTUAL INFERIOR (30% - 35%): Espaciada y sin superposiciones
   const contentPad = pad + 44;

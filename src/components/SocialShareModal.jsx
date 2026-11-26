@@ -270,11 +270,22 @@ export const SocialShareModal = ({
     try {
       setIsSavingBadge(true);
       setSaveBadgeSuccess(false);
+      const baseSpecs = Array.isArray(product.specs)
+        ? product.specs.filter(
+            (s) => !(s && typeof s === 'object' && String(s.key || s.title || '').toUpperCase() === 'BADGE_CONFIG')
+          )
+        : [];
+      const updatedSpecs = [
+        ...baseSpecs,
+        { key: 'BADGE_CONFIG', value: JSON.stringify(badgeConfig) },
+      ];
       const updatedProduct = {
         ...product,
         condition: badgeConfig.secondary?.enabled ? badgeConfig.secondary.text : (product.condition || 'Nuevo'),
         commercialTag: badgeConfig.primary?.enabled ? badgeConfig.primary.text : '',
         badge: badgeConfig.primary?.enabled ? badgeConfig.primary.text : '',
+        badgeConfig,
+        specs: updatedSpecs,
       };
       await storeService.saveProduct(updatedProduct);
       setSaveBadgeSuccess(true);

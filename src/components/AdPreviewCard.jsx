@@ -648,6 +648,130 @@ export const AdPreviewCard = ({
     return resolveBadgeStyle(secondaryBadge.palette, style.badge?.split(' ')[0], '#FFFFFF');
   }, [secondaryBadge, style]);
 
+  // Agrupar todos los badges activos en las 4 esquinas sin colisiones ni recortes
+  const cornerBadges = useMemo(() => {
+    const groups = {
+      'top-left': [],
+      'top-right': [],
+      'bottom-left': [],
+      'bottom-right': [],
+    };
+    const pushToCorner = (pos, item) => {
+      const safePos = groups[pos] ? pos : 'top-left';
+      groups[safePos].push(item);
+    };
+
+    const primaryText = primaryBadge?.text ? String(primaryBadge.text).trim().toUpperCase() : '';
+    const hasPrimaryDiscount = Boolean(primaryText && /^-\d+%$/.test(primaryText));
+
+    if (data.discount > 0 && !hasPrimaryDiscount) {
+      pushToCorner('top-left', {
+        key: 'auto-discount',
+        text: `-${data.discount}%`,
+        style: { background: '#0A6CFF', color: '#FFFFFF', border: 'rgba(255,255,255,0.4)' },
+      });
+    }
+
+    if (primaryBadge && primaryStyle) {
+      pushToCorner(primaryBadge.position || 'top-left', {
+        key: 'primary',
+        text: primaryText,
+        style: primaryStyle,
+      });
+    }
+
+    if (secondaryBadge && secondaryStyle) {
+      pushToCorner(secondaryBadge.position || 'bottom-right', {
+        key: 'secondary',
+        text: String(secondaryBadge.text).trim().toUpperCase(),
+        style: secondaryStyle,
+      });
+    }
+
+    return groups;
+  }, [data.discount, primaryBadge, primaryStyle, secondaryBadge, secondaryStyle]);
+
+  const renderCornerZones = (photoCount = 1) => (
+    <>
+      {cornerBadges['top-left'].length > 0 && (
+        <div className="absolute top-2.5 left-2.5 z-20 flex flex-col items-start gap-1.5 pointer-events-none">
+          {cornerBadges['top-left'].map((b) => (
+            <span
+              key={b.key}
+              className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-md border"
+              style={{
+                background: b.style.background,
+                color: b.style.color,
+                borderColor: b.style.border || 'rgba(255,255,255,0.4)',
+              }}
+            >
+              {b.text}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {(photoCount > 1 || cornerBadges['top-right'].length > 0) && (
+        <div className="absolute top-2.5 right-2.5 z-20 flex flex-col items-end gap-1.5 pointer-events-none">
+          {photoCount > 1 && (
+            <span className="px-1.5 py-0.5 rounded-md bg-slate-900/65 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1 shadow-sm">
+              <ImageIcon className="w-2.5 h-2.5" /> {photoCount}
+            </span>
+          )}
+          {cornerBadges['top-right'].map((b) => (
+            <span
+              key={b.key}
+              className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-md border"
+              style={{
+                background: b.style.background,
+                color: b.style.color,
+                borderColor: b.style.border || 'rgba(255,255,255,0.4)',
+              }}
+            >
+              {b.text}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {cornerBadges['bottom-left'].length > 0 && (
+        <div className="absolute bottom-2.5 left-2.5 z-20 flex flex-col items-start gap-1.5 pointer-events-none">
+          {cornerBadges['bottom-left'].map((b) => (
+            <span
+              key={b.key}
+              className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-md border"
+              style={{
+                background: b.style.background,
+                color: b.style.color,
+                borderColor: b.style.border || 'rgba(255,255,255,0.4)',
+              }}
+            >
+              {b.text}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {cornerBadges['bottom-right'].length > 0 && (
+        <div className="absolute bottom-2.5 right-2.5 z-20 flex flex-col items-end gap-1.5 pointer-events-none">
+          {cornerBadges['bottom-right'].map((b) => (
+            <span
+              key={b.key}
+              className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-md border"
+              style={{
+                background: b.style.background,
+                color: b.style.color,
+                borderColor: b.style.border || 'rgba(255,255,255,0.4)',
+              }}
+            >
+              {b.text}
+            </span>
+          ))}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div
       className={`group relative overflow-hidden rounded-3xl transition-all duration-300 w-full mx-auto ${formatAspect} ${style.shell} ${borderClass} ${className} flex flex-col justify-between`}
@@ -676,17 +800,8 @@ export const AdPreviewCard = ({
                 event.currentTarget.src = '/zafra/logo-menu.webp';
               }}
             />
-            {/* Badges superiores sobre imagen */}
-            {(data.discount > 0 || primaryBadge) && (
-              <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1">
-                <span className="px-2 py-0.5 rounded-lg bg-[#0A6CFF] text-white text-[10px] font-black uppercase tracking-wider shadow-sm">
-                  {primaryBadge?.text || `-${data.discount}%`}
-                </span>
-              </div>
-            )}
-            <span className="absolute top-2.5 right-2.5 z-10 px-1.5 py-0.5 rounded-md bg-slate-900/60 backdrop-blur-xs text-white text-[9.5px] font-bold flex items-center gap-1 shadow-sm">
-              <ImageIcon className="w-2.5 h-2.5" /> 2
-            </span>
+            {/* Badges dinámicos en las 4 esquinas sin colisiones */}
+            {renderCornerZones(Array.isArray(product?.images) && product.images.length > 0 ? product.images.length : 1)}
           </div>
 
           {/* Columna Derecha: Estructura Idéntica a Tarjeta de Catálogo */}
@@ -761,16 +876,8 @@ export const AdPreviewCard = ({
                 event.currentTarget.src = '/zafra/logo-menu.webp';
               }}
             />
-            {/* Badge de Oferta / Descuento (Top-Left) */}
-            {(data.discount > 0 || primaryBadge) && (
-              <span className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded-lg bg-[#0A6CFF] text-white text-[11px] font-black uppercase tracking-wider shadow-sm">
-                {primaryBadge?.text || `-${data.discount}%`}
-              </span>
-            )}
-            {/* Contador de Fotos (Top-Right) */}
-            <span className="absolute top-3 right-3 z-10 px-1.5 py-0.5 rounded-md bg-slate-900/60 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1 shadow-sm">
-              <ImageIcon className="w-2.5 h-2.5" /> 2
-            </span>
+            {/* Badges dinámicos en las 4 esquinas sin colisiones */}
+            {renderCornerZones(Array.isArray(product?.images) && product.images.length > 0 ? product.images.length : 1)}
           </div>
 
           {/* 2. Cuerpo de Información Comercial Estilo Tarjeta Principal */}
