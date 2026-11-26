@@ -704,7 +704,7 @@ export const storeService = {
         if (isUuid(cleanId)) {
           const res = await supabase
             .from('products')
-            .select('*')
+            .select(CATALOG_SELECT_COLUMNS)
             .eq('id', cleanId)
             .limit(1)
             .maybeSingle();
@@ -716,7 +716,7 @@ export const storeService = {
           try {
             const alt = await supabase
               .from('products')
-              .select('*')
+              .select(CATALOG_SELECT_COLUMNS)
               .or(`reference.eq.${cleanId},sku.eq.${cleanId},barcode.eq.${cleanId},ean.eq.${cleanId}`)
               .limit(1)
               .maybeSingle();
@@ -732,7 +732,7 @@ export const storeService = {
               const queryStr = `%${searchTerms.slice(0, 3).join('%')}%`;
               const byTitle = await supabase
                 .from('products')
-                .select('*')
+                .select(CATALOG_SELECT_COLUMNS)
                 .ilike('title', queryStr)
                 .limit(6);
               if (byTitle?.data && byTitle.data.length > 0) {
@@ -809,10 +809,28 @@ export const storeService = {
   async getProducts(options = {}) {
     const { forceFresh = false } = options;
 
-    // 0. Caché SWR en memoria (5 min) cuando no se fuerza recarga fresca
+    // 0. Caché SWR en memoria + sessionStorage L2 (5 min) cuando no se fuerza recarga fresca
     if (!forceFresh && Array.isArray(productsMemoryCache.data) && productsMemoryCache.data.length > 0) {
       if (Date.now() - productsMemoryCache.timestamp < PRODUCTS_SWR_TTL_MS) {
         return productsMemoryCache.data;
+      }
+    }
+    if (!forceFresh && typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        const rawSwr = window.sessionStorage.getItem('javrel_products_swr_v1');
+        if (rawSwr) {
+          const parsedSwr = JSON.parse(rawSwr);
+          if (
+            Array.isArray(parsedSwr?.data) &&
+            parsedSwr.data.length > 0 &&
+            Date.now() - (parsedSwr.timestamp || 0) < PRODUCTS_SWR_TTL_MS
+          ) {
+            productsMemoryCache = { data: parsedSwr.data, timestamp: parsedSwr.timestamp };
+            return parsedSwr.data;
+          }
+        }
+      } catch {
+        // Ignorar sessionStorage corrupto
       }
     }
 
@@ -1045,7 +1063,18 @@ export const storeService = {
     }
 
     if (merged.length > 0) {
-      productsMemoryCache = { data: merged, timestamp: Date.now() };
+      const nowTs = Date.now();
+      productsMemoryCache = { data: merged, timestamp: nowTs };
+      try {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          window.sessionStorage.setItem(
+            'javrel_products_swr_v1',
+            JSON.stringify({ data: merged, timestamp: nowTs })
+          );
+        }
+      } catch {
+        // Ignorar si sessionStorage excede cuota
+      }
     }
 
     return merged;
@@ -1637,6 +1666,7 @@ export const storeService = {
 
   // Eliminación Masiva de Productos de Raíz — Hard DELETE en Supabase en lote
   async deleteMultipleProducts(ids = []) {
+    invalidateProductsCache();
     if (!Array.isArray(ids) || ids.length === 0) return { success: false, count: 0 };
     const idSet = new Set(ids.map((id) => String(id).trim()));
     const idsArray = Array.from(idSet);
