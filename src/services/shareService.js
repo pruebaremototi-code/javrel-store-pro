@@ -8,12 +8,12 @@ import { getProductSlug } from './textUtils';
  */
 
 const FALLBACK_ORIGIN = 'https://www.javrelstore.shop';
-export const SHARE_CACHE_VERSION = '20261125';
+export const SHARE_CACHE_VERSION = '4';
 export const TIKTOK_UPLOAD_URL = 'https://www.tiktok.com/upload?lang=es';
 export const MESSENGER_HOME_URL = 'https://www.messenger.com/';
 
 /**
- * Añade el parámetro ?v=20261125 a cualquier URL compartida si aún no tiene `v`,
+ * Añade el parámetro ?v=4 a cualquier URL compartida si aún no tiene `v`,
  * forzando a los servidores de WhatsApp y redes sociales a invalidar su caché
  * de vista previa y descargar los metadatos Open Graph actualizados.
  */
@@ -53,7 +53,7 @@ export const buildStoreShareUrl = () => {
 };
 
 /**
- * URL canónica del producto: /p/:slug?v=20261125 (con retrocompatibilidad para /p/:id).
+ * URL canónica del producto: /p/:slug?v=4 (con retrocompatibilidad para /p/:id).
  * Genera enlaces limpios, profesionales y amigables basados en el nombre
  * o referencia del producto, con cache-busting para WhatsApp y redes sociales.
  */
