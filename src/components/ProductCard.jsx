@@ -306,6 +306,7 @@ export const ProductCard = ({
             draggable={false}
             className="w-full h-full object-cover object-center block group-hover:scale-105 transition-transform duration-500 ease-out"
             loading={priority ? 'eager' : 'lazy'}
+            fetchPriority={priority ? 'high' : 'low'}
             decoding="async"
             onError={(e) => {
               e.target.src = '/zafra/logo-menu.webp';

@@ -200,6 +200,8 @@ export function App() {
   const [filterType, setFilterType] = useState('all'); // 'all', 'ofertas', 'nuevos', 'destacados'
   const [filterPriceMax, setFilterPriceMax] = useState(2000000);
   const [filterInStockOnly, setFilterInStockOnly] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(16);
+  const loadMoreRef = useRef(null);
 
   // Estados de Modales y Experiencia E-commerce
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -1109,6 +1111,27 @@ export function App() {
     return result;
   }, [products, activeCategory, filterType, filterPriceMax, maxAvailablePrice, filterInStockOnly, searchTerm, sortBy]);
 
+  // Reiniciar paginación al cambiar filtros o búsqueda
+  useEffect(() => {
+    setVisibleCount(16);
+  }, [activeCategory, searchTerm, filterType, sortBy, filterInStockOnly]);
+
+  // Carga progresiva por scroll (IntersectionObserver)
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((prev) => prev + 16);
+        }
+      },
+      { rootMargin: '320px' }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [filteredProducts.length, visibleCount]);
+
   // Etiqueta legible del filtro activo (nunca mostrar un UUID crudo al usuario).
   const activeCategoryLabel = useMemo(() => {
     if (!activeCategory || activeCategory === 'all') return '';
@@ -1373,26 +1396,41 @@ export function App() {
 
             {/* Grid de Productos con columnas fijas según densidad seleccionada */}
             {filteredProducts.length > 0 ? (
-              <div
-                className={`grid ${densityCols} gap-4 xl:gap-5`}
-              >
-                {filteredProducts.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    config={config}
-                    categories={categories}
-                    isAdmin={isAdmin}
-                    onQuickView={setSelectedProduct}
-                    onAddToCart={handleAddToCart}
-                    onOpenLightbox={handleOpenLightboxModal}
-                    onOpenImagePicker={(prod) =>
-                      setImagePickerTarget({ id: prod.id, currentImage: prod.image })
-                    }
-                    onUpdateProductField={handleUpdateProductField}
-                  />
-                ))}
-              </div>
+              <>
+                <div
+                  className={`grid ${densityCols} gap-4 xl:gap-5`}
+                >
+                  {filteredProducts.slice(0, visibleCount).map((product, idx) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      config={config}
+                      categories={categories}
+                      isAdmin={isAdmin}
+                      priority={idx < 4}
+                      onQuickView={setSelectedProduct}
+                      onAddToCart={handleAddToCart}
+                      onOpenLightbox={handleOpenLightboxModal}
+                      onOpenImagePicker={(prod) =>
+                        setImagePickerTarget({ id: prod.id, currentImage: prod.image })
+                      }
+                      onUpdateProductField={handleUpdateProductField}
+                    />
+                  ))}
+                </div>
+
+                {visibleCount < filteredProducts.length && (
+                  <div ref={loadMoreRef} className="mt-8 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setVisibleCount((prev) => prev + 16)}
+                      className="px-6 py-2.5 rounded-full bg-white border border-slate-200 hover:border-[#0A6CFF] text-xs font-bold text-slate-700 hover:text-[#0A6CFF] shadow-xs transition-all cursor-pointer"
+                    >
+                      Mostrar más productos ({filteredProducts.length - visibleCount} restantes)
+                    </button>
+                  </div>
+                )}
+              </>
             ) : isLoadingProducts ? (
               <div className={`grid ${densityCols} gap-4 xl:gap-5`} aria-busy="true" aria-label="Cargando catálogo">
                 {Array.from({ length: 8 }).map((_, idx) => (

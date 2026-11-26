@@ -68,6 +68,37 @@ export const uploadToStorage = async (blob, fileName = null) => {
   }
 };
 
+/**
+ * Extrae el path relativo dentro del bucket `product-images` desde una URL pública de Supabase Storage.
+ */
+export const extractStoragePath = (url) => {
+  if (typeof url !== 'string') return null;
+  const marker = `/storage/v1/object/public/${STORAGE_BUCKET}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  const clean = url.slice(idx + marker.length).split('?')[0];
+  return clean ? decodeURIComponent(clean) : null;
+};
+
+/**
+ * Elimina archivos huérfanos en Supabase Storage a partir de un arreglo de URLs.
+ */
+export const deleteStorageFilesByUrls = async (urls = []) => {
+  try {
+    const paths = [...new Set((Array.isArray(urls) ? urls : [urls]).map(extractStoragePath).filter(Boolean))];
+    if (paths.length === 0) return { removed: 0 };
+    const { error } = await supabase.storage.from(STORAGE_BUCKET).remove(paths);
+    if (error) {
+      console.warn('[imageOptimizer] Error eliminando archivos de Storage:', error.message);
+      return { removed: 0, error };
+    }
+    return { removed: paths.length };
+  } catch (err) {
+    console.warn('[imageOptimizer] Excepción eliminando de Storage:', err?.message || err);
+    return { removed: 0 };
+  }
+};
+
 export const imageOptimizer = {
   /**
    * Comprime y redimensiona una imagen a formato WebP optimizado (máx. 1000px, <50KB).

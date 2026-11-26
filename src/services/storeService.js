@@ -18,6 +18,23 @@ const STORAGE_KEYS = {
   PURGED_PRODUCTS: 'javrelstore_purged_products_v1',
 };
 
+// Caché SWR en memoria + sessionStorage (TTL 5 minutos) para minimizar egress de Supabase
+const PRODUCTS_SWR_TTL_MS = 5 * 60 * 1000;
+const CATALOG_SELECT_COLUMNS =
+  'id,title,name,slug,brand,brand_id,category_id,category,price,original_price,cost,stock,image_url,additional_images,badge,commercial_tag,condition,rating,reviews,featured,is_featured,description,specs,created_at';
+let productsMemoryCache = { data: null, timestamp: 0 };
+
+export const invalidateProductsCache = () => {
+  productsMemoryCache = { data: null, timestamp: 0 };
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.removeItem('javrel_products_swr_v1');
+    }
+  } catch {
+    // noop
+  }
+};
+
 /**
  * Sanitiza URLs de imagen antes de enviarlas a Supabase.
  * - URLs externas (https://...) → se pasan tal cual (referencia directa, 0 bytes en BD)
@@ -791,6 +808,14 @@ export const storeService = {
   // Obtener Productos con Prioridad en la Nube (Multi-Dispositivo Inmediato)
   async getProducts(options = {}) {
     const { forceFresh = false } = options;
+
+    // 0. Caché SWR en memoria (5 min) cuando no se fuerza recarga fresca
+    if (!forceFresh && Array.isArray(productsMemoryCache.data) && productsMemoryCache.data.length > 0) {
+      if (Date.now() - productsMemoryCache.timestamp < PRODUCTS_SWR_TTL_MS) {
+        return productsMemoryCache.data;
+      }
+    }
+
     const purgedSet = new Set(this.getPurgedProducts().map((id) => String(id).trim()));
     const initialIdSet = new Set(INITIAL_PRODUCTS.map((p) => String(p.id)));
     let rawCloud = null;
@@ -841,7 +866,7 @@ export const storeService = {
         const to   = from + PAGE_SIZE - 1;
         const { data: pageData, error: pageError } = await supabase
           .from('products')
-          .select('*')
+          .select(CATALOG_SELECT_COLUMNS)
           .range(from, to)
           .order('created_at', { ascending: false });
         if (pageError) {
@@ -1019,11 +1044,16 @@ export const storeService = {
       // Ignorar
     }
 
+    if (merged.length > 0) {
+      productsMemoryCache = { data: merged, timestamp: Date.now() };
+    }
+
     return merged;
   },
 
   // Guardar Producto Individual
   async saveProduct(product) {
+    invalidateProductsCache();
     let savedInSupabase = false;
     let visualFieldsSynced = false;
     const finalProduct = {
@@ -1126,6 +1156,7 @@ export const storeService = {
 
   // Actualización Atómica y Verificación de Filas Afectadas en Supabase (Multi-Dispositivo Inmediato)
   async updateProductAtomic(product) {
+    invalidateProductsCache();
     if (!product || !product.id) return { success: false, rowsAffected: 0 };
     const cleanId = ensureUuid(product.id);
 
@@ -1461,6 +1492,7 @@ export const storeService = {
 
   // Invalidación Forzada de Caché y Recarga en Caliente desde Supabase
   async forceRefreshFromCloud() {
+    invalidateProductsCache();
     try {
       localStorage.removeItem(STORAGE_KEYS.PRODUCTS);
       localStorage.removeItem(STORAGE_KEYS.LAST_SYNC);
@@ -1486,6 +1518,7 @@ export const storeService = {
 
   // Eliminar Producto de Raíz (Hard-Delete en Supabase, Storage, Local y Servidor Global)
   async deleteProduct(id) {
+    invalidateProductsCache();
     if (!id) return { success: false };
     const strId = String(id).trim();
 

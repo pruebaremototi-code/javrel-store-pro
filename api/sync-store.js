@@ -48,7 +48,7 @@ export default async function handler(req, res) {
       // 1. Intentar consultar Supabase en vivo — select('*') paginado
       const { data: dbProducts, error: pError } = await supabase
         .from('products')
-        .select('*')
+        .select('id,title,name,slug,brand,brand_id,category_id,category,price,original_price,stock,image_url,additional_images,badge,commercial_tag,condition,rating,reviews,featured,is_featured,description,specs,created_at')
         .range(from, to)
         .order('created_at', { ascending: false });
       const { data: dbCategories, error: cError } = await supabase

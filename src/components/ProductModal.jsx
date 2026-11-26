@@ -26,6 +26,7 @@ import {
 import { TechViewer360 } from './TechViewer360';
 import { GalleryManagerStrip } from './GalleryManagerStrip';
 import { formatCurrency, buildWhatsAppUrl, storeService } from '../services/storeService';
+import { deleteStorageFilesByUrls } from '../services/imageOptimizer';
 import {
   formatDisplayReference,
   formatCleanEan,
@@ -476,6 +477,7 @@ export const ProductModal = ({
 
   const handleReorderGallery = async (reorderedList) => {
     if (!Array.isArray(reorderedList) || reorderedList.length === 0) return;
+    const removedUrls = galleryImages.filter((url) => url && !reorderedList.includes(url));
     const newMainImage = reorderedList[0];
     const newAdditional = reorderedList.slice(1);
     if (onUpdateProductField) {
@@ -490,6 +492,9 @@ export const ProductModal = ({
         images: reorderedList,
         additional_images: newAdditional,
       });
+      if (removedUrls.length > 0) {
+        deleteStorageFilesByUrls(removedUrls).catch(() => {});
+      }
       if (onRefetchProducts) onRefetchProducts();
     } catch (err) {
       console.warn('Error sincronizando orden de galería:', err);
