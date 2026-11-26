@@ -2,24 +2,43 @@
 <html lang="es" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/zafra/logo-menu.webp" />
+    <!-- ═══════════════════════════════════════════════════
+         FAVICON Y ICONOS DE DISPOSITIVO
+         favicon.svg  → navegadores modernos (Chromium, Firefox, Safari 17+)
+         favicon.png  → fallback navegadores sin soporte SVG
+         apple-touch-icon → iOS / iPadOS (pantalla de inicio)
+         ═══════════════════════════════════════════════════ -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/favicon.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>JavrelStore | Catálogo de Tecnología Prémium, Celulares y Periféricos</title>
+    <title>JavrelStore | Tecnología y Gaming en Colombia</title>
     <meta name="description" content="JavrelStore: Especialistas en iPhones, smartphones, computadores gamer, consolas, periféricos de alta gama y soporte técnico con envíos a todo el país y atención directa." />
 
-    <!-- Open Graph base: las fichas compartidas usan /p/:id con metadatos por producto -->
+    <!-- ═══════════════════════════════════════════════════
+         OPEN GRAPH — Vista previa en WhatsApp, Facebook, Telegram, etc.
+         og:image DEBE ser URL absoluta en producción.
+         Dimensiones de og-logo.webp: 2000×667 px ✓ (> 300×300 requerido)
+         ═══════════════════════════════════════════════════ -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="JavrelStore" />
-    <meta property="og:title" content="JavrelStore | Tecnología Prémium, Celulares y Periféricos" />
-    <meta property="og:description" content="iPhones, smartphones, computadores gamer, consolas y periféricos de alta gama con envío asegurado a todo el país." />
-    <meta property="og:image" content="https://mercado-tecnologico.vercel.app/zafra/banner-teclado.jpg" />
-    <meta property="og:image:alt" content="JavrelStore — Tecnología prémium" />
-    <meta property="og:url" content="https://mercado-tecnologico.vercel.app/" />
+    <meta property="og:title" content="JavrelStore | Tecnología y Gaming en Colombia" />
+    <meta property="og:description" content="iPhones, smartphones, computadores gamer, consolas y periféricos de alta gama con envío asegurado a todo el país. Garantía oficial directa." />
+    <meta property="og:image" content="https://javrelstore.shop/og-logo.webp" />
+    <meta property="og:image:width" content="2000" />
+    <meta property="og:image:height" content="667" />
+    <meta property="og:image:alt" content="JavrelStore — Tecnología prémium en Colombia" />
+    <meta property="og:url" content="https://javrelstore.shop" />
     <meta property="og:locale" content="es_CO" />
+
+    <!-- ═══════════════════════════════════════════════════
+         TWITTER / X CARDS
+         ═══════════════════════════════════════════════════ -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="JavrelStore | Tecnología Prémium, Celulares y Periféricos" />
+    <meta name="twitter:site" content="@javrelstore" />
+    <meta name="twitter:title" content="JavrelStore | Tecnología y Gaming en Colombia" />
     <meta name="twitter:description" content="iPhones, smartphones, computadores gamer, consolas y periféricos de alta gama con envío asegurado a todo el país." />
-    <meta name="twitter:image" content="https://mercado-tecnologico.vercel.app/zafra/banner-teclado.jpg" />
+    <meta name="twitter:image" content="https://javrelstore.shop/og-logo.webp" />
     <!-- Google Fonts idénticas a la referencia Zafara -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
