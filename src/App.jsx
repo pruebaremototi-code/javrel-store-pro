@@ -184,7 +184,11 @@ const normalizeCartItems = (raw) => {
 
 
 export function App() {
-  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  // Estado inicial vacío: evita mostrar productos residuales (mock/hardcodeados) antes
+  // de recibir la respuesta real de Supabase. Los skeletons de carga se muestran
+  // mientras products.length === 0 && loading === true.
+  const [products, setProducts] = useState([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
   const [config, setConfig] = useState(INITIAL_CONFIG);
 
@@ -310,6 +314,8 @@ export function App() {
       }
     } catch (err) {
       console.warn('Error sincronizando tienda:', err);
+    } finally {
+      setIsLoadingProducts(false);
     }
   }, []);
 
@@ -370,6 +376,27 @@ export function App() {
   // 1. Cargar datos iniciales desde Supabase y la nube global
   useEffect(() => {
     async function init() {
+      // Limpiar productos residuales (mock/hardcodeados) del localStorage ANTES de cargar
+      // para que el catálogo no muestre datos de demostración en la primera renderización.
+      // Solo se borra si el contenido parece venir de los IDs de INITIAL_PRODUCTS (pc-001, etc.)
+      const PRODUCTS_STORAGE_KEY = 'super_wow_products_v2';
+      try {
+        const rawStored = localStorage.getItem(PRODUCTS_STORAGE_KEY);
+        if (rawStored) {
+          const parsed = JSON.parse(rawStored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const mockIds = new Set(INITIAL_PRODUCTS.map((p) => String(p.id)));
+            const hasOnlyMock = parsed.every((p) => p && mockIds.has(String(p.id)));
+            if (hasOnlyMock) {
+              localStorage.removeItem(PRODUCTS_STORAGE_KEY);
+            }
+          }
+        }
+      } catch {
+        // Si falla el parse, simplemente eliminamos para limpiar basura
+        try { localStorage.removeItem(PRODUCTS_STORAGE_KEY); } catch { /* noop */ }
+      }
+
       await loadStoreData();
 
       // Cargar Carrito desde localStorage
@@ -435,11 +462,11 @@ export function App() {
     // Registrar inmediatamente para evitar peticiones duplicadas o re-renders en bucle
     sharedProductHandledRef.current = sharedId;
 
-    // A) Búsqueda inmediata síncrona en memoria / localStorage / INITIAL_PRODUCTS
+    // A) Búsqueda inmediata síncrona en memoria / localStorage (sin INITIAL_PRODUCTS para no
+    //    mezclar datos de demostración en rutas de producto compartido)
     const localPool = [
       ...(Array.isArray(products) ? products : []),
       ...storeService.getProductsFromStorage(),
-      ...INITIAL_PRODUCTS,
     ];
 
     const cleanSharedLower = sharedId.toLowerCase();
@@ -1364,6 +1391,24 @@ export function App() {
                     }
                     onUpdateProductField={handleUpdateProductField}
                   />
+                ))}
+              </div>
+            ) : isLoadingProducts ? (
+              <div className={`grid ${densityCols} gap-4 xl:gap-5`} aria-busy="true" aria-label="Cargando catálogo">
+                {Array.from({ length: 8 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-2xl border border-slate-200/80 bg-white/85 p-3 shadow-xs animate-pulse"
+                  >
+                    <div className="aspect-square w-full rounded-xl bg-slate-200/80 mb-3" />
+                    <div className="h-3 w-1/3 rounded bg-slate-200/80 mb-2" />
+                    <div className="h-4 w-4/5 rounded bg-slate-200/80 mb-1.5" />
+                    <div className="h-4 w-2/3 rounded bg-slate-200/80 mb-3" />
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <div className="h-5 w-24 rounded bg-slate-200/80" />
+                      <div className="h-8 w-8 rounded-full bg-slate-200/80" />
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (

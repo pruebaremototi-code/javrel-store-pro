@@ -993,18 +993,24 @@ export const storeService = {
     }
 
     // 4. Fallback local / fábrica cuando la nube está totalmente inaccesible.
+    //    NUNCA devolver INITIAL_PRODUCTS (datos hardcodeados/demo) si ya hay productos
+    //    locales reales guardados. Los INITIAL_PRODUCTS solo son un último recurso absoluto
+    //    cuando la BD y el localStorage están completamente vacíos.
     if (merged.length === 0) {
       const localFiltered = localRaw.filter(
         (p) => p && p.id && !purgedSet.has(String(p.id).trim())
       );
-      merged =
-        localFiltered.length > 0
-          ? localFiltered.map((p) => ({
-              ...p,
-              description: sanitizeCommercialText(p.description || ''),
-              brand: cleanBrand(p.brand),
-            }))
-          : INITIAL_PRODUCTS.filter((p) => !purgedSet.has(String(p.id).trim()));
+      // Excluir registros locales que coincidan con IDs de demo (pc-001, pc-002, etc.)
+      const demoIds = new Set(INITIAL_PRODUCTS.map((p) => String(p.id)));
+      const realLocal = localFiltered.filter((p) => !demoIds.has(String(p.id)));
+      // Solo usar localFiltered reales; NO insertar INITIAL_PRODUCTS para evitar datos basura
+      merged = realLocal.map((p) => ({
+        ...p,
+        description: sanitizeCommercialText(p.description || ''),
+        brand: cleanBrand(p.brand),
+      }));
+      // Si no hay nada (ni nube ni local reales), devolver vacío — la UI mostrará
+      // el estado vacío limpio en lugar de productos de demostración
     }
 
     try {

@@ -2180,8 +2180,9 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   ctx.restore();
 
   // 1) Título del producto en tipografía gruesa y alto contraste
-  const titleY = brandY + 34; // y ≈ 1388
-  drawWrappedText(
+  //    titleY deja 58px bajo brandY porque drawWrappedText usa textBaseline='alphabetic'
+  const titleY = brandY + 58; // y ≈ 1412
+  const titleLines = drawWrappedText(
     ctx,
     data.productName,
     contentPad,
@@ -2194,9 +2195,9 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   );
 
   // 2) Precio actual destacado en gran tamaño (+ regular tachado si aplica)
-  const priceY = titleY + 100; // y ≈ 1488
+  const priceY = titleY + (Math.max(1, titleLines) - 1) * 50 + 68;
   ctx.save();
-  ctx.font = `900 62px ${FONT_HEAD}`;
+  ctx.font = `900 60px ${FONT_HEAD}`;
   ctx.fillStyle = isDark ? '#FFFFFF' : '#0F172A';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -2206,24 +2207,26 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
 
   if (data.hasRegular) {
     const regStr = formatCurrency(data.regular);
-    ctx.font = `600 32px ${FONT_HEAD}`;
+    ctx.font = `600 30px ${FONT_HEAD}`;
     ctx.fillStyle = '#94A3B8';
-    const regX = contentPad + offerW + 20;
-    ctx.fillText(regStr, regX, priceY + 3);
+    const regX = contentPad + offerW + 22;
     const regW = ctx.measureText(regStr).width;
-    ctx.beginPath();
-    ctx.moveTo(regX, priceY + 3);
-    ctx.lineTo(regX + regW, priceY + 3);
-    ctx.strokeStyle = '#94A3B8';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
+    if (regX + regW <= contentPad + contentW) {
+      ctx.fillText(regStr, regX, priceY + 3);
+      ctx.beginPath();
+      ctx.moveTo(regX, priceY + 3);
+      ctx.lineTo(regX + regW, priceY + 3);
+      ctx.strokeStyle = '#94A3B8';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
   }
   ctx.restore();
 
   // 3) Detalles clave / característica principal (1 o 2 líneas bien encuadradas con auto-wrap)
-  const specY = priceY + 58; // y ≈ 1546
+  const specY = priceY + 58;
   const specText = data.specHighlight || data.description || 'Garantía Oficial Directa · Despacho Inmediato a Todo el País';
-  drawWrappedText(
+  const specLines = drawWrappedText(
     ctx,
     `✓ ${specText}`,
     contentPad,
@@ -2236,7 +2239,7 @@ const drawStory = (ctx, width, height, data, palette, image, logo, glassEffect =
   );
 
   // 4) Botón visual tipo CTA ("Ver en Tienda")
-  const ctaY = specY + 62; // y ≈ 1608
+  const ctaY = specY + (Math.max(1, specLines) - 1) * 30 + 38;
   const ctaBtnW = contentW;
   const ctaBtnH = 64;
   ctx.save();
@@ -2743,12 +2746,8 @@ const waitForFonts = async () => {
   }
 };
 
-const loadImageSafe = (src, timeoutMs = 4000) =>
+const loadImageElement = (src, useCrossOrigin, timeoutMs) =>
   new Promise((resolve) => {
-    if (!src) {
-      resolve(null);
-      return;
-    }
     const image = new Image();
     let timer = null;
 
@@ -2763,27 +2762,101 @@ const loadImageSafe = (src, timeoutMs = 4000) =>
       resolve(null);
     }, timeoutMs);
 
-    // Activar crossOrigin solo si es URL HTTP/HTTPS externa para permitir canvas toBlob()
-    if (/^https?:\/\//i.test(src)) {
+    if (useCrossOrigin) {
       image.crossOrigin = 'anonymous';
     }
-    image.decoding = 'async';
-    image.referrerPolicy = 'no-referrer';
 
-    image.onload = () => {
+    image.onload = async () => {
       cleanup();
+      try {
+        if (typeof image.decode === 'function') {
+          await image.decode();
+        }
+      } catch {
+        // decode() puede fallar en SVG; continuar igualmente
+      }
       resolve(image);
     };
 
     image.onerror = () => {
       cleanup();
-      // Si la carga con crossOrigin falla por restricción del servidor externo,
-      // resolver null de forma segura para usar el respaldo gráfico sin romper el canvas
       resolve(null);
     };
 
     image.src = src;
   });
+
+const fetchAsObjectUrl = async (url, timeoutMs = 7000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      mode: 'cors',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (!blob || blob.size === 0) return null;
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
+ * Carga una imagen de forma 100% segura para Canvas 2D (nunca "tainted").
+ * 1. Si es data:/blob:/ruta local → carga directa + img.decode().
+ * 2. Si es URL http(s) → fetch(mode:'cors', cache:'no-store') → Blob URL same-origin → img.decode().
+ * 3. Si CORS directo falla → proxy same-origin /api/image-proxy?url=... → Blob URL → img.decode().
+ * 4. Último recurso → <img crossOrigin="anonymous"> con cache-bust.
+ */
+const loadImageSafe = async (src, timeoutMs = 7000) => {
+  if (!src) return null;
+  const cleanSrc = String(src).trim();
+  if (!cleanSrc) return null;
+
+  const isExternalHttp = /^https?:\/\//i.test(cleanSrc);
+  if (!isExternalHttp) {
+    return loadImageElement(cleanSrc, false, timeoutMs);
+  }
+
+  const isSupabaseStorage = /supabase\.co\/storage/i.test(cleanSrc);
+  let directUrl = cleanSrc;
+  if (isSupabaseStorage) {
+    try {
+      const u = new URL(cleanSrc);
+      u.searchParams.set('_cb', String(Date.now()));
+      directUrl = u.toString();
+    } catch {
+      directUrl = cleanSrc;
+    }
+  }
+
+  // 1. Fetch CORS directo → Blob URL (mismo origen, garantiza canvas.toBlob() limpio)
+  const directBlobUrl = await fetchAsObjectUrl(directUrl, timeoutMs);
+  if (directBlobUrl) {
+    const img = await loadImageElement(directBlobUrl, false, timeoutMs);
+    setTimeout(() => URL.revokeObjectURL(directBlobUrl), 15000);
+    if (img) return img;
+  }
+
+  // 2. Proxy same-origin (/api/image-proxy) si el origen remoto bloqueó CORS
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    const proxyUrl = `${window.location.origin}/api/image-proxy?url=${encodeURIComponent(cleanSrc)}`;
+    const proxyBlobUrl = await fetchAsObjectUrl(proxyUrl, timeoutMs);
+    if (proxyBlobUrl) {
+      const img = await loadImageElement(proxyBlobUrl, false, timeoutMs);
+      setTimeout(() => URL.revokeObjectURL(proxyBlobUrl), 15000);
+      if (img) return img;
+    }
+  }
+
+  // 3. Fallback con <img crossOrigin="anonymous"> (nunca sin crossOrigin para no manchar el canvas)
+  return loadImageElement(directUrl, true, timeoutMs);
+};
 
 export async function renderPromoCard({
   product,

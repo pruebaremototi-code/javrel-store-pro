@@ -111,13 +111,15 @@ export default async function handler(req, res) {
 
       return res
         .status(200)
-        .setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
+        .setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0')
+        .setHeader('Pragma', 'no-cache')
+        .setHeader('Expires', '0')
         .json({
           success: true,
-          products: products || (cachedStore?.products) || null,
+          products: products ?? cachedStore?.products ?? null,
           categories: categories || (cachedStore?.categories) || null,
           config: cachedStore?.config || null,
-          timestamp: cachedStore?.timestamp || Date.now(),
+          timestamp: Date.now(),
           page,
           limit,
         });

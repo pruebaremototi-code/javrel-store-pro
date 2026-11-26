@@ -242,6 +242,8 @@ export const StatusPrepModal = ({
                       <img
                         src={cardUrl}
                         alt={`Tarjeta promocional de ${productName}`}
+                        crossOrigin="anonymous"
+                        decoding="async"
                         className="h-full w-full object-contain animate-fadeIn"
                       />
                     )}

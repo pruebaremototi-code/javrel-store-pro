@@ -8,6 +8,12 @@ const USD_EXCHANGE_RATE = Math.max(1000, Number(import.meta.env.VITE_USD_EXCHANG
 const hasValidPayPalClientId =
   Boolean(PAYPAL_CLIENT_ID) && !PAYPAL_CLIENT_ID.includes('tu_paypal_client_id');
 
+// Detecta modo sandbox: Client ID de sandbox empieza con "AZ" o el env dice sandbox/no-live
+const isSandboxMode =
+  PAYPAL_CLIENT_ID.startsWith('AZ') ||
+  PAYPAL_CLIENT_ID.toLowerCase().includes('sandbox') ||
+  String(import.meta.env.VITE_PAYPAL_ENV || 'sandbox').toLowerCase() !== 'live';
+
 let paypalSdkPromise = null;
 
 /**
@@ -125,17 +131,39 @@ export const PayPalInlineSection = ({
                 ],
               });
             },
-            onApprove: async (_data, actions) => {
-              const details = await actions.order.capture();
+            onApprove: async (data, _actions) => {
               const current = latestPayloadRef.current;
-              current.onPayPalApproved?.({
-                transactionId: details?.id || current.orderReference,
-                payerEmail: details?.payer?.email_address || '',
-                totalUSD: current.totalUSD,
-                baseUSD: current.baseUSD,
-                paypalFeeUSD: current.paypalFeeUSD,
-                rawDetails: details,
-              });
+              setSdkError('');
+              try {
+                const res = await fetch('/api/paypal-capture', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    paypalOrderId: data.orderID,
+                    internalRef: current.orderReference,
+                    expectedAmountUSD: current.totalUSD,
+                  }),
+                });
+                const result = await res.json();
+                if (!result.success) {
+                  setSdkError(
+                    result.error ||
+                      'El pago no pudo ser verificado en el servidor. Contacta soporte.'
+                  );
+                  return;
+                }
+                current.onPayPalApproved?.({
+                  transactionId: result.transactionId,
+                  payerEmail: result.payerEmail || '',
+                  totalUSD: current.totalUSD,
+                  baseUSD: current.baseUSD,
+                  paypalFeeUSD: current.paypalFeeUSD,
+                  rawDetails: null,
+                });
+              } catch (err) {
+                console.error('[PayPal Capture]', err);
+                setSdkError('Error de conexión al verificar el pago. Intenta nuevamente.');
+              }
             },
             onError: (err) => {
               console.error('[PayPal SDK Error]', err);
@@ -193,6 +221,17 @@ export const PayPalInlineSection = ({
 
   return (
     <div className="space-y-3.5 animate-fadeIn">
+      {/* Badge de modo sandbox — solo visible cuando el Client ID es de pruebas */}
+      {hasValidPayPalClientId && isSandboxMode && (
+        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-[11px] text-amber-900 font-semibold flex items-center gap-1.5">
+          <span>⚠️</span>
+          <span>
+            Modo Sandbox (pruebas) — Los pagos <strong>NO</strong> son reales. Cambia a credenciales
+            Live antes de producción.
+          </span>
+        </div>
+      )}
+
       {/* Cálculo transparente en USD */}
       <p className="text-[11px] text-slate-600 text-center">
         Pedido <strong>${baseUSD.toFixed(2)} USD</strong> ({formatCurrency(totalCOP)}) +{' '}
