@@ -1568,8 +1568,10 @@ const drawCornerBadgesStack = (
   const secondary = data?.badgeConfig?.secondary;
   const primaryText = primary?.enabled && primary?.text ? String(primary.text).trim().toUpperCase() : '';
   const hasPrimaryDiscount = Boolean(primaryText && /^-\d+%$/.test(primaryText));
+  // Si el admin configuró un badge primario activo, el auto-descuento no debe aparecer
+  const hasPrimaryConfigured = Boolean(primary?.enabled && primary?.text);
 
-  if (includeAutoDiscount && data?.discount > 0 && !hasPrimaryDiscount) {
+  if (includeAutoDiscount && data?.discount > 0 && !hasPrimaryDiscount && !hasPrimaryConfigured) {
     push('top-left', {
       text: `-${data.discount}%`,
       pal: { bg: '#0A6CFF', gradTo: '#0056D2', text: '#FFFFFF', border: 'rgba(255,255,255,0.45)' },

@@ -34,6 +34,7 @@ import { generateUuid } from '../services/textUtils';
 import { webImageSearchService } from '../services/webImageSearchService';
 import { erpFinanceService } from '../services/erpFinanceService';
 import { VisualImageSearchModal } from './VisualImageSearchModal';
+import { GalleryManagerStrip } from './GalleryManagerStrip';
 import { PERMISSIONS, getRoleLabel } from '../config/rbac';
 import { useVisualEditor } from '../context/VisualEditorContext';
 
@@ -1153,6 +1154,38 @@ export const InPlaceEditorToolbar = ({
                         Obteniendo vistas alternativas de alta resolución en la web...
                       </p>
                     )}
+                  </div>
+                )}
+
+                {/* Gestor de Galería: reordenar, hacer portada y eliminar imágenes ya cargadas */}
+                {suggestedImages.length > 0 && (
+                  <div className="pt-2 border-t border-violet-200/50 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                        <span className="text-emerald-600">★</span> Galería · Arrastra, usa ← / → o pulsa ★ Portada para ordenar
+                      </span>
+                      <span className="text-[10px] text-slate-500">{suggestedImages.length} imágenes</span>
+                    </div>
+                    <GalleryManagerStrip
+                      images={suggestedImages.map((img) => img.url || img.thumb || img)}
+                      selectedIndex={0}
+                      canEdit={true}
+                      onChangeOrder={(reordered) => {
+                        setSuggestedImages((prev) => {
+                          const urlToItem = Object.fromEntries(
+                            prev.map((img) => [img.url || img.thumb || img, img])
+                          );
+                          return reordered.map((url) => urlToItem[url] || { url, thumb: url });
+                        });
+                        if (reordered.length > 0) {
+                          setNewProd((prev) => ({
+                            ...prev,
+                            image: reordered[0],
+                            images: reordered,
+                          }));
+                        }
+                      }}
+                    />
                   </div>
                 )}
 

@@ -595,47 +595,57 @@ export const AdPreviewCard = ({
 
   const productSlug = useMemo(() => getProductSlug(product), [product]);
 
+  // --- Badge primario (Comercial / Promo) ---
+  // Si badgeConfig.primary existe y está habilitado → usarlo.
+  // Si no existe config → derivar del producto (commercialTag o descuento auto).
   const primaryBadge = useMemo(() => {
-    if (!badgeConfig?.primary) {
-      if (data.commercialTag) {
-        return {
-          enabled: true,
-          text: data.commercialTag,
-          position: 'top-left',
-          palette: /black\s*friday/i.test(data.commercialTag) ? 'gold' : 'neon-blue',
-        };
-      }
-      if (data.discount > 0) {
-        return {
-          enabled: true,
-          text: `-${data.discount}%`,
-          position: 'top-left',
-          palette: 'theme',
-        };
-      }
-      return null;
+    if (badgeConfig?.primary) {
+      return badgeConfig.primary.enabled && badgeConfig.primary.text
+        ? badgeConfig.primary
+        : null;
     }
-    return badgeConfig.primary.enabled && badgeConfig.primary.text ? badgeConfig.primary : null;
+    // Sin config: auto-derivar
+    if (data.commercialTag) {
+      return {
+        enabled: true,
+        text: data.commercialTag,
+        position: 'top-left',
+        palette: /black\s*friday/i.test(data.commercialTag) ? 'gold' : 'neon-blue',
+      };
+    }
+    if (data.discount > 0) {
+      return {
+        enabled: true,
+        text: `-${data.discount}%`,
+        position: 'top-left',
+        palette: 'theme',
+      };
+    }
+    return null;
   }, [badgeConfig, data.commercialTag, data.discount]);
 
+  // --- Badge secundario (Condición física) ---
   const secondaryBadge = useMemo(() => {
-    if (!badgeConfig?.secondary) {
-      if (data.condition && data.condition !== 'Nuevo') {
-        return {
-          enabled: true,
-          text: data.condition,
-          position: 'bottom-right',
-          palette:
-            data.condition === 'Seminuevo'
-              ? 'gold'
-              : data.condition === 'Usado'
-                ? 'platinum'
-                : 'emerald',
-        };
-      }
-      return null;
+    if (badgeConfig?.secondary) {
+      return badgeConfig.secondary.enabled && badgeConfig.secondary.text
+        ? badgeConfig.secondary
+        : null;
     }
-    return badgeConfig.secondary.enabled && badgeConfig.secondary.text ? badgeConfig.secondary : null;
+    // Sin config: auto-derivar por condición
+    if (data.condition && data.condition !== 'Nuevo') {
+      return {
+        enabled: true,
+        text: data.condition,
+        position: 'bottom-right',
+        palette:
+          data.condition === 'Seminuevo'
+            ? 'gold'
+            : data.condition === 'Usado'
+              ? 'platinum'
+              : 'emerald',
+      };
+    }
+    return null;
   }, [badgeConfig, data.condition]);
 
   const primaryStyle = useMemo(() => {
@@ -648,7 +658,9 @@ export const AdPreviewCard = ({
     return resolveBadgeStyle(secondaryBadge.palette, style.badge?.split(' ')[0], '#FFFFFF');
   }, [secondaryBadge, style]);
 
-  // Agrupar todos los badges activos en las 4 esquinas sin colisiones ni recortes
+  // --- Agrupar todos los badges en las 4 esquinas sin solapamientos ---
+  // Regla: el auto-descuento sólo se agrega cuando NO hay badge primario configurado
+  //        con texto propio (así la paleta y posición del admin tienen prioridad total).
   const cornerBadges = useMemo(() => {
     const groups = {
       'top-left': [],
@@ -664,7 +676,9 @@ export const AdPreviewCard = ({
     const primaryText = primaryBadge?.text ? String(primaryBadge.text).trim().toUpperCase() : '';
     const hasPrimaryDiscount = Boolean(primaryText && /^-\d+%$/.test(primaryText));
 
-    if (data.discount > 0 && !hasPrimaryDiscount) {
+    // Auto-descuento: sólo si no existe NINGÚN badge primario configurado manualmente
+    const hasPrimaryConfigured = Boolean(badgeConfig?.primary?.enabled && badgeConfig.primary.text);
+    if (data.discount > 0 && !hasPrimaryDiscount && !hasPrimaryConfigured) {
       pushToCorner('top-left', {
         key: 'auto-discount',
         text: `-${data.discount}%`,
@@ -689,7 +703,7 @@ export const AdPreviewCard = ({
     }
 
     return groups;
-  }, [data.discount, primaryBadge, primaryStyle, secondaryBadge, secondaryStyle]);
+  }, [data.discount, badgeConfig, primaryBadge, primaryStyle, secondaryBadge, secondaryStyle]);
 
   const renderCornerZones = (photoCount = 1) => (
     <>
