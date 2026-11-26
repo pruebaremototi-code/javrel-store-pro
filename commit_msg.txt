@@ -1,1 +1,0 @@
-perf: sessionStorage L2 SWR cache, getProductById sin select star, invalidateCache en deleteMultiple
