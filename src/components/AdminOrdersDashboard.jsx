@@ -72,6 +72,7 @@ import { AdminPaymentQrModal } from './AdminPaymentQrModal';
 import { AdminPurchasesPanel } from './AdminPurchasesPanel';
 import { AdminCreditsPanel } from './AdminCreditsPanel';
 import { SocialShareModal } from './SocialShareModal';
+import { GalleryManagerStrip } from './GalleryManagerStrip';
 import { erpFinanceService } from '../services/erpFinanceService';
 import { PERMISSIONS, getRoleLabel } from '../config/rbac';
 import { normalizeSearchText } from '../services/textUtils';
@@ -1333,100 +1334,40 @@ export const AdminOrdersDashboard = ({
 
             {/* Galería de Múltiples Imágenes (Principal + Secundarias) */}
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
                   <Images className="w-3.5 h-3.5 text-[#0A6CFF]" />
                   <span>Galería de Múltiples Fotos ({Array.isArray(editingProduct.images) ? editingProduct.images.length : 1})</span>
                 </label>
                 <span className="text-[10px] text-slate-500">
-                  Usa "Usar como Portada" para fijar la foto protagonista
+                  Arrastra, usa ← / → o pulsa ★ Portada para ordenar
                 </span>
               </div>
 
-              {/* Tira de Miniaturas con Selección Directa de Portada */}
-              <div className="flex items-center gap-3 overflow-x-auto py-2 px-1">
-                {(Array.isArray(editingProduct.images) && editingProduct.images.length > 0
-                  ? editingProduct.images
-                  : [editingProduct.image || '/zafra/logo-menu.webp']
-                ).map((imgUrl, imgIdx) => {
-                  const isCover = (editingProduct.image === imgUrl || imgIdx === 0);
-                  return (
-                    <div
-                      key={imgIdx}
-                      className={`relative group/slot flex-shrink-0 w-20 h-20 rounded-2xl border-2 p-1 bg-white transition-all shadow-xs ${
-                        isCover
-                          ? 'border-[#0A6CFF] ring-2 ring-[#0A6CFF]/20 shadow-md'
-                          : 'border-slate-200 hover:border-slate-400'
-                      }`}
-                    >
-                      <img
-                        src={imgUrl}
-                        alt={`Foto ${imgIdx + 1}`}
-                        className="w-full h-full object-contain rounded-xl cursor-pointer"
-                        onClick={() => {
-                          const currentList = Array.isArray(editingProduct.images) ? [...editingProduct.images] : [editingProduct.image];
-                          const reordered = [imgUrl, ...currentList.filter((_, idx) => idx !== imgIdx)];
-                          setEditingProduct({
-                            ...editingProduct,
-                            image: imgUrl,
-                            images: reordered,
-                            additional_images: reordered.slice(1),
-                          });
-                          showNotification('★ Imagen seleccionada como Portada Principal');
-                        }}
-                        title="Haz clic para seleccionar como Portada Principal"
-                      />
-
-                      {/* Insignia / Botón Usar como Portada */}
-                      {isCover ? (
-                        <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-emerald-600 text-[8px] font-black tracking-wide text-white shadow-sm flex items-center gap-0.5 select-none pointer-events-none whitespace-nowrap">
-                          ★ Portada
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const currentList = Array.isArray(editingProduct.images) ? [...editingProduct.images] : [editingProduct.image];
-                            const reordered = [imgUrl, ...currentList.filter((_, idx) => idx !== imgIdx)];
-                            setEditingProduct({
-                              ...editingProduct,
-                              image: imgUrl,
-                              images: reordered,
-                              additional_images: reordered.slice(1),
-                            });
-                            showNotification('★ Imagen seleccionada como Portada Principal');
-                          }}
-                          className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-slate-900 hover:bg-[#0A6CFF] text-[8px] font-bold text-white shadow-md transition-all whitespace-nowrap cursor-pointer hover:scale-105 z-10"
-                          title="Fijar como Portada Principal"
-                        >
-                          Usar como Portada
-                        </button>
-                      )}
-
-                      {/* Botón Quitar Foto (si no es la única) */}
-                      {!isCover && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const updated = (editingProduct.images || []).filter((_, idx) => idx !== imgIdx);
-                            setEditingProduct({
-                              ...editingProduct,
-                              images: updated,
-                              additional_images: updated.slice(1),
-                            });
-                          }}
-                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity shadow-xs hover:bg-rose-600"
-                          title="Quitar foto de la galería"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              {/* Gestor de Galería: Drag & Drop, flechas, ★ Portada y Eliminar */}
+              <GalleryManagerStrip
+                images={
+                  Array.isArray(editingProduct.images) && editingProduct.images.length > 0
+                    ? editingProduct.images
+                    : [editingProduct.image || '/zafra/logo-menu.webp']
+                }
+                selectedIndex={0}
+                canEdit={true}
+                onChangeOrder={(reordered) => {
+                  if (!Array.isArray(reordered) || reordered.length === 0) return;
+                  const newCover = reordered[0];
+                  const newAdditional = reordered.slice(1);
+                  setEditingProduct((prev) => ({
+                    ...prev,
+                    image: newCover,
+                    images: reordered,
+                    additional_images: newAdditional,
+                  }));
+                  if (newCover !== editingProduct.image) {
+                    showNotification('★ Orden y Portada Principal actualizados');
+                  }
+                }}
+              />
             </div>
 
             {/* Botón Autocompletar compacto inline */}

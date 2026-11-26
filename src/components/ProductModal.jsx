@@ -24,6 +24,7 @@ import {
   Copy,
 } from 'lucide-react';
 import { TechViewer360 } from './TechViewer360';
+import { GalleryManagerStrip } from './GalleryManagerStrip';
 import { formatCurrency, buildWhatsAppUrl, storeService } from '../services/storeService';
 import {
   formatDisplayReference,
@@ -473,47 +474,25 @@ export const ProductModal = ({
     setEditingSlotIndex(null);
   };
 
-  const handleRemoveSecondaryImage = async (e, indexToRemove) => {
-    e.stopPropagation();
-    if (indexToRemove === 0) return;
-    const updatedList = galleryImages.filter((_, idx) => idx !== indexToRemove);
+  const handleReorderGallery = async (reorderedList) => {
+    if (!Array.isArray(reorderedList) || reorderedList.length === 0) return;
+    const newMainImage = reorderedList[0];
+    const newAdditional = reorderedList.slice(1);
     if (onUpdateProductField) {
-      onUpdateProductField('images', updatedList);
-    }
-    if (selectedImageIndex >= updatedList.length) {
-      setSelectedImageIndex(Math.max(0, updatedList.length - 1));
+      onUpdateProductField('image', newMainImage);
+      onUpdateProductField('images', reorderedList);
+      onUpdateProductField('additional_images', newAdditional);
     }
     try {
       await storeService.updateProductAtomic({
         ...product,
-        images: updatedList,
+        image: newMainImage,
+        images: reorderedList,
+        additional_images: newAdditional,
       });
       if (onRefetchProducts) onRefetchProducts();
     } catch (err) {
-      console.warn('Error eliminando foto secundaria:', err);
-    }
-  };
-
-  const handleSetAsCover = async (e, index) => {
-    e?.stopPropagation();
-    if (index === 0 || !galleryImages[index]) return;
-    const targetUrl = galleryImages[index];
-    const reordered = [targetUrl, ...galleryImages.filter((_, idx) => idx !== index)];
-
-    setSelectedImageIndex(0);
-    if (onUpdateProductField) {
-      onUpdateProductField('image', targetUrl);
-      onUpdateProductField('images', reordered);
-    }
-    try {
-      await storeService.updateProductAtomic({
-        ...product,
-        image: targetUrl,
-        images: reordered,
-      });
-      if (onRefetchProducts) onRefetchProducts();
-    } catch (err) {
-      console.warn('Error fijando portada:', err);
+      console.warn('Error sincronizando orden de galería:', err);
     }
   };
 
@@ -666,87 +645,16 @@ export const ProductModal = ({
                   )}
                 </div>
 
-                {/* Tira Horizontal de Miniaturas con Badge "PORTADA" */}
-                <div className="flex items-center gap-2.5 overflow-x-auto py-1 no-scrollbar">
-                  {galleryImages.map((imgUrl, idx) => {
-                    const isMainSlot = idx === 0;
-                    const isSelected = selectedImageIndex === idx;
-
-                    return (
-                      <div
-                        key={idx}
-                        className={`group/thumb relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl p-1 bg-white transition-all duration-200 flex-shrink-0 cursor-pointer border-2 ${
-                          isSelected
-                            ? 'border-[#0A6CFF] shadow-md shadow-blue-500/20 scale-[1.03]'
-                            : 'border-slate-200 opacity-75 hover:opacity-100 hover:border-slate-300'
-                        }`}
-                        onClick={() => setSelectedImageIndex(idx)}
-                        onMouseEnter={() => setSelectedImageIndex(idx)}
-                      >
-                        <img
-                          src={imgUrl}
-                          alt={`Miniatura ${idx + 1}`}
-                          className="w-full h-full object-contain rounded-lg"
-                          loading="lazy"
-                        />
-
-                        {isMainSlot && (
-                          <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.5 rounded-md bg-emerald-600 text-[8px] font-mono-code font-bold uppercase tracking-wider text-white shadow-2xs">
-                            ★ PORTADA
-                          </span>
-                        )}
-
-                        {canEdit && (
-                          <div className="absolute inset-0 bg-slate-900/65 rounded-xl opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1 z-10 p-1">
-                            {!isMainSlot && (
-                              <button
-                                type="button"
-                                onClick={(e) => handleSetAsCover(e, idx)}
-                                className="px-1.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[8px] shadow-sm transition-colors whitespace-nowrap"
-                                title="Usar esta foto como Portada Principal"
-                              >
-                                ★ Portada
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={(e) => handleOpenImageSlotPicker(e, idx)}
-                              className="p-1 rounded-md bg-white text-slate-800 hover:bg-blue-50 hover:text-blue-600 shadow-sm transition-colors"
-                              title={isMainSlot ? 'Cambiar Foto Principal' : `Cambiar foto ${idx + 1}`}
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-
-                            {!isMainSlot && (
-                              <button
-                                type="button"
-                                onClick={(e) => handleRemoveSecondaryImage(e, idx)}
-                                className="p-1 rounded-md bg-white text-rose-600 hover:bg-rose-50 shadow-sm transition-colors"
-                                title="Eliminar foto secundaria"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {/* Botón "+" para añadir imagen a la galería */}
-                  {canEdit && (
-                    <button
-                      type="button"
-                      onClick={(e) => handleOpenImageSlotPicker(e, -1)}
-                      className="group/add w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl border-2 border-dashed border-blue-300 hover:border-blue-600 bg-blue-50/50 hover:bg-blue-50 text-blue-600 flex flex-col items-center justify-center gap-0.5 transition-all flex-shrink-0 cursor-pointer shadow-2xs hover:scale-102"
-                      title="Añadir nueva foto a la galería"
-                    >
-                      <Plus className="w-5 h-5 group-hover/add:rotate-90 transition-transform duration-200 text-blue-600" />
-                      <span className="text-[9px] font-bold tracking-tight text-blue-700">Añadir</span>
-                    </button>
-                  )}
-                </div>
+                {/* Tira Horizontal de Miniaturas con Drag & Drop, flechas, Portada y Eliminar */}
+                <GalleryManagerStrip
+                  images={galleryImages}
+                  selectedIndex={selectedImageIndex}
+                  onSelectIndex={setSelectedImageIndex}
+                  canEdit={canEdit}
+                  onChangeOrder={handleReorderGallery}
+                  onEditSlot={(e, idx) => handleOpenImageSlotPicker(e, idx)}
+                  onAddImage={(e) => handleOpenImageSlotPicker(e, -1)}
+                />
               </div>
 
               {/* SECCIÓN DERECHA: INFORMACIÓN, COMPRA Y ESPECIFICACIONES TÉCNICAS */}
