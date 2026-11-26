@@ -8,8 +8,30 @@ import { getProductSlug } from './textUtils';
  */
 
 const FALLBACK_ORIGIN = 'https://www.javrelstore.shop';
+export const SHARE_CACHE_VERSION = '20261125';
 export const TIKTOK_UPLOAD_URL = 'https://www.tiktok.com/upload?lang=es';
 export const MESSENGER_HOME_URL = 'https://www.messenger.com/';
+
+/**
+ * Añade el parámetro ?v=20261125 a cualquier URL compartida si aún no tiene `v`,
+ * forzando a los servidores de WhatsApp y redes sociales a invalidar su caché
+ * de vista previa y descargar los metadatos Open Graph actualizados.
+ */
+export const appendShareCacheParam = (rawUrl, version = SHARE_CACHE_VERSION) => {
+  const clean = String(rawUrl || '').trim();
+  if (!clean) return `${FALLBACK_ORIGIN}/?v=${version}`;
+  try {
+    const parsed = new URL(clean);
+    if (!parsed.searchParams.has('v')) {
+      parsed.searchParams.set('v', version);
+    }
+    return parsed.toString();
+  } catch {
+    if (/[?&]v=/.test(clean)) return clean;
+    const sep = clean.includes('?') ? '&' : '?';
+    return `${clean}${sep}v=${version}`;
+  }
+};
 
 export const getShareOrigin = () => {
   if (typeof window === 'undefined') return FALLBACK_ORIGIN;
@@ -25,16 +47,21 @@ export const getShareOrigin = () => {
   return origin.replace(/^http:\/\//i, 'https://');
 };
 
+export const buildStoreShareUrl = () => {
+  const origin = getShareOrigin();
+  return appendShareCacheParam(`${origin}/`);
+};
+
 /**
- * URL canónica del producto: /p/:slug (con retrocompatibilidad para /p/:id).
+ * URL canónica del producto: /p/:slug?v=20261125 (con retrocompatibilidad para /p/:id).
  * Genera enlaces limpios, profesionales y amigables basados en el nombre
- * o referencia del producto (ej. https://www.javrelstore.shop/p/xbox-series-s-1tb-sdd).
+ * o referencia del producto, con cache-busting para WhatsApp y redes sociales.
  */
 export const buildProductShareUrl = (product) => {
   const origin = getShareOrigin();
   const slug = getProductSlug(product);
-  if (!slug) return `${origin}/`;
-  return `${origin}/p/${encodeURIComponent(slug)}`;
+  if (!slug) return appendShareCacheParam(`${origin}/`);
+  return appendShareCacheParam(`${origin}/p/${encodeURIComponent(slug)}`);
 };
 
 export const getAbsoluteImageUrl = (image) => {
