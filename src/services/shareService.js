@@ -8,12 +8,12 @@ import { getProductSlug } from './textUtils';
  */
 
 const FALLBACK_ORIGIN = 'https://www.javrelstore.shop';
-export const SHARE_CACHE_VERSION = '4';
+export const SHARE_CACHE_VERSION = '8';
 export const TIKTOK_UPLOAD_URL = 'https://www.tiktok.com/upload?lang=es';
 export const MESSENGER_HOME_URL = 'https://www.messenger.com/';
 
 /**
- * Añade el parámetro ?v=4 a cualquier URL compartida si aún no tiene `v`,
+ * Añade el parámetro ?v=8 a cualquier URL compartida si aún no tiene `v`,
  * forzando a los servidores de WhatsApp y redes sociales a invalidar su caché
  * de vista previa y descargar los metadatos Open Graph actualizados.
  */

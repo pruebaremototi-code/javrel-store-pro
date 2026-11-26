@@ -8,7 +8,7 @@
 
 const FALLBACK_ORIGIN = 'https://www.javrelstore.shop';
 const STORE_NAME = 'JavrelStore';
-const DEFAULT_IMAGE = '/og-image.png?v=4';
+const DEFAULT_IMAGE = '/og-image.jpg?v=8';
 const DEFAULT_SUPABASE_URL = 'https://mnwockpzhhbcavqehrdy.supabase.co';
 const DEFAULT_SUPABASE_KEY = 'sb_publishable_R3yoD44f33EvVPUu0A7jbg_mc_DJKTF';
 
